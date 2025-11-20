@@ -1,0 +1,12 @@
+{
+  "devDependencies": {
+    "@types/node": "^22.13.17",
+    "typescript": "^5.5.2"
+  },
+  "scripts": {
+    "repl"  : "tsc && node js/bin/repl.js",
+    "build" : "rm -rf ./js && tsc",
+    "test"  : "rm -rf ./js && tsc && node --test js/tests/*.test.js",
+    "prove" : "rm -rf ./js && tsc && node js/bin/prove.js"
+  }
+}
