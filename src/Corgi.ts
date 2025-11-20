@@ -117,7 +117,7 @@ function tail (l : List) : List {
 
 // -----------------------------------------------------------------------------
 
-type EnvKey = Word | Special
+type EnvKey = Word | Special | Var
 
 class Environment extends Map<Ident, Expr> {
 
@@ -159,7 +159,7 @@ function evaluate (expr : Expr, env : Environment, depth : number = 0) : Expr {
             for (let i = 0; i < params.length; i++) {
                 let param = params[i];
                 let arg   = args[i];
-                assertWord(param);
+                assertVar(param);
                 assertExpr(arg);
                 env.assign(param, arg);
             }
@@ -168,9 +168,10 @@ function evaluate (expr : Expr, env : Environment, depth : number = 0) : Expr {
             if (DEBUG) LOG(depth, '*LIST*');
             return Cons( top, evaluate(tail(expr), env, depth + 1) as List );
         }
+    case isVar(expr):
     case isWord(expr):
     case isSpecial(expr):
-        if (DEBUG) LOG(depth, 'Got Word | Special', expr);
+        if (DEBUG) LOG(depth, 'Got Var | Word | Special', expr);
         return env.lookup(expr);
     case isLiteral(expr):
         if (DEBUG) LOG(depth, 'Got Literal', expr);
@@ -188,7 +189,7 @@ function evaluate (expr : Expr, env : Environment, depth : number = 0) : Expr {
 let env = new Environment();
 
 env.assign( Special('lambda'), FExpr(
-    list( Word('params'), Word('body') ),
+    list( Var('params'), Var('body') ),
     (args : Expr[]) : Expr => {
         let [ params, body ] = args;
         assertList(params);
@@ -198,7 +199,7 @@ env.assign( Special('lambda'), FExpr(
 ));
 
 env.assign( Word('+'), Native(
-    list( Word('n'), Word('m') ),
+    list( Var('n'), Var('m') ),
     (args : Expr[]) : Expr => {
         let [ lhs, rhs ] = args;
         assertInt(lhs);
@@ -212,8 +213,8 @@ env.assign( Word('+'), Native(
 let expr = list(
     list(
         Special('lambda'),
-        list( Word('x'), Word('y') ),
-        list( Word('+'), Word('x'), Word('y') ),
+        list( Var('x'), Var('y') ),
+        list( Word('+'), Var('x'), Var('y') ),
     ),
     Int(10),
     Int(20)
