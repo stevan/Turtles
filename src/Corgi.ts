@@ -282,7 +282,7 @@ namespace Runtime {
         case TypeUtil.isCons(expr):
             if (DEBUG) LOG(depth, 'Got CONS');
             let top = evaluate(ListUtil.head(expr), env, depth + 1);
-            if (DEBUG) LOG(depth, 'EVAL(h)', top);
+            if (DEBUG) LOG(depth, 'EVAL(h)?', top);
             switch (true) {
             case TypeUtil.isFExpr(top):
                 if (DEBUG) LOG(depth, '++ APPLY *FEXPR*', top);
