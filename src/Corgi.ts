@@ -103,28 +103,19 @@ class Environment extends Map<Ident, any> {
 
 // -----------------------------------------------------------------------------
 
-type Expr = Value
+const deCons = (l : List) : Value[] => isNil(l) ? [] : [ head(l), ...deCons(tail(l)) ]
 
-function evaluate (expr : Expr, env : Environment) : Value {
 
-    const flattenList = (l : List) : Value[] => {
-        let args = [];
-        let rest = l;
-        while (!isNil(rest)) {
-            args.push( head(rest) )
-            rest = tail(rest);
-        }
-        return args;
-    }
-
+function evaluate (expr : Value, env : Environment) : Value {
     switch (true) {
-    case isList(expr):
+    case isCons(expr):
         let word = head(expr);
         if (isWord(word)) {
-            let bif = env.lookup(word);
-            return bif( ...flattenList(tail(expr)).map((arg) => evaluate(arg, env)) );
+            let bif  = env.lookup(word);
+            let args = evaluate(tail(expr), env) as List;
+            return bif( ...deCons(args) );
         } else {
-            return list( ...flattenList(expr).map((arg) => evaluate(arg, env)) );
+            return Cons( evaluate(head(expr), env), evaluate(tail(expr), env) as List );
         }
     case isValue(expr):
         return expr;
@@ -143,16 +134,10 @@ env.set('+', (lhs : Value, rhs : Value) : Value => {
     return Int(lhs.value + rhs.value);
 });
 
-let expr = list( Int(20), list( Word('+'), Int(2), list( Word('+'), Int(20), list( Word('+'), Int(2), Int(5) ) ) ) );
+let expr = list( Word('+'), Int(20), list( Word('+'), Int(2), list( Word('+'), Int(20), list( Word('+'), Int(2), Int(5) ) ) ) );
 
 console.log(JSON.stringify(evaluate(expr, env), null, 4));
 
 // -----------------------------------------------------------------------------
-
-
-
-
-
-
 
 
