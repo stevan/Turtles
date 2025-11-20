@@ -169,10 +169,8 @@ function evaluate (expr : Expr, env : Environment, depth : number = 0) : Expr {
             return Cons( top, evaluate(tail(expr), env, depth + 1) as List );
         }
     case isWord(expr):
-        if (DEBUG) LOG(depth, 'Got Word', expr);
-        return env.lookup(expr);
     case isSpecial(expr):
-        if (DEBUG) LOG(depth, 'Got Special', expr);
+        if (DEBUG) LOG(depth, 'Got Word | Special', expr);
         return env.lookup(expr);
     case isLiteral(expr):
         if (DEBUG) LOG(depth, 'Got Literal', expr);
