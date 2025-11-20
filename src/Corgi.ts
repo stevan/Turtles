@@ -1,7 +1,7 @@
 // -----------------------------------------------------------------------------
 
-type True   = { type : '*T*' }
-type False  = { type : '*F*' }
+type True   = { type : '*T*', value : true  }
+type False  = { type : '*F*', value : false }
 
 type Bool = True | False
 
@@ -17,7 +17,7 @@ type Cons = { type : 'CONS', head : Expr, tail : List }
 type List = Cons | Nil
 
 type NativeFunc  = ( args : Expr[] ) => Expr
-type NativeFExpr = ( args : Expr[] ) => Expr
+type NativeFExpr = ( args : Expr[], env: Environment ) => Expr
 
 type Lambda  = { type : 'LAMBDA',  params : List, body : List }
 type Native  = { type : 'NATIVE',  params : List, body : NativeFunc  }
@@ -51,7 +51,7 @@ function isSpecial  (v : any) : v is Special  { return v.type == 'SPECIAL' }
 function isList     (v : any) : v is List     { return isCons(v)    || isNil(v)    }
 function isBool     (v : any) : v is Bool     { return isTrue(v)    || isFalse(v)  }
 function isCallable (v : any) : v is Callable { return isNative(v)  || isLambda(v) || isFExpr(v) }
-function isLiteral  (v : any) : v is Literal  { return isInt(v)  || isFloat(v) || isString(v)  || isBool(v)     }
+function isLiteral  (v : any) : v is Literal  { return isInt(v)  || isFloat(v) || isString(v)  || isBool(v) }
 function isExpr     (v : any) : v is Expr     { return isList(v) || isWord(v)  || isLiteral(v) || isCallable(v) || isVar(v) || isSpecial(v) }
 
 function assertInt      (v : any) : asserts v is Int      { if (!isInt(v))      throw new Error("Not Int")      }
@@ -75,8 +75,8 @@ function assertExpr     (v : any) : asserts v is Expr     { if (!isExpr(v))     
 
 // -----------------------------------------------------------------------------
 
-function True  () : True  { return { type : '*T*' } }
-function False () : False { return { type : '*F*' } }
+function True  () : True  { return { type : '*T*', value : true  } }
+function False () : False { return { type : '*F*', value : false } }
 
 function Int    (value : number) : Int    { return { type : 'INT', value } }
 function Float  (value : number) : Float  { return { type : 'FLT', value } }
@@ -183,25 +183,28 @@ class Environment {
 // -----------------------------------------------------------------------------
 
 const DEBUG = true;
-const LOG   = (d : number, msg : string, e : any = undefined) => console.log(`LOG[ ${d.toString().padStart(2, '0')} ] `, msg, e ? `${format(e)}` : '' );
+const LOG   = (d : number, msg : string, e : any = undefined) =>
+    console.log(`LOG[ ${d.toString().padStart(2, '0')} ] ${msg} - `, e ? `${format(e)}` : '...' );
+
+const DUMP = (label : string, expr : Expr, env : Environment) => {
+    console.group(`-- ${label} `, '-'.repeat(80 - (label.length + 5)));
+    console.log('%.ENV  : ', env.DUMP());
+    console.log('@.EXPR : ', format(expr));
+    console.groupEnd();
+    console.log('-'.repeat(80));
+}
 
 function evaluate (expr : Expr, env : Environment, depth : number = 0) : Expr {
-    if (DEBUG) {
-        console.group('-- TICK ', '-'.repeat(60));
-        console.log('%ENV  : ', env.DUMP());
-        console.log('@EXPR : ', format(expr));
-        console.groupEnd();
-        console.log('-'.repeat(69));
-    }
+    if (DEBUG) DUMP( 'TICK', expr, env );
     switch (true) {
     case isCons(expr):
         if (DEBUG) LOG(depth, 'Got CONS');
         let top = evaluate(head(expr), env, depth + 1);
-        if (DEBUG) LOG(depth, 'APPLY?', top);
+        if (DEBUG) LOG(depth, 'EVAL(h)', top);
         switch (true) {
         case isFExpr(top):
             if (DEBUG) LOG(depth, '++ APPLY *FEXPR*', top);
-            return top.body( flatten( tail(expr) ) );
+            return top.body( flatten( tail(expr) ), env );
         case isNative(top):
             if (DEBUG) LOG(depth, '++ APPLY *NATIVE*', top);
             return top.body( flatten( evaluate(tail(expr), env, depth + 1) as List ) );
@@ -228,10 +231,8 @@ function evaluate (expr : Expr, env : Environment, depth : number = 0) : Expr {
         if (DEBUG) LOG(depth, 'Got Var | Word | Special', expr);
         return env.lookup(expr);
     case isLiteral(expr):
-        if (DEBUG) LOG(depth, 'Got Literal', expr);
-        return expr;
     case isNil(expr):
-        if (DEBUG) LOG(depth, '()');
+        if (DEBUG) LOG(depth, 'Got Literal | Nil', expr);
         return expr;
     default:
         throw new Error('WTF!');
@@ -252,6 +253,28 @@ env.assign( Special('lambda'), FExpr(
     }
 ));
 
+env.assign(Special('if'), FExpr(
+    list(Var('cond'), Var('then'), Var('else')),
+    (args : Expr[], env : Environment) : Expr => {
+      let [ cond, thenBranch, elseBranch ] = args;
+      assertCons(cond);
+      assertCons(thenBranch);
+      assertCons(elseBranch);
+      let result = evaluate( cond, env );
+      return evaluate( isFalse(result) ? elseBranch : thenBranch, env );
+  }
+));
+
+env.assign( Word('=='), Native(
+    list( Var('n'), Var('m') ),
+    (args : Expr[]) : Expr => {
+        let [ lhs, rhs ] = args;
+        assertLiteral(lhs);
+        assertLiteral(rhs);
+        return (lhs.value == rhs.value) ? True() : False();
+    }
+));
+
 env.assign( Word('+'), Native(
     list( Var('n'), Var('m') ),
     (args : Expr[]) : Expr => {
@@ -262,17 +285,31 @@ env.assign( Word('+'), Native(
     }
 ));
 
+env.assign( Word('*'), Native(
+    list( Var('n'), Var('m') ),
+    (args : Expr[]) : Expr => {
+        let [ lhs, rhs ] = args;
+        assertInt(lhs);
+        assertInt(rhs);
+        return Int(lhs.value * rhs.value);
+    }
+));
+
 let expr = list(
     list(
         Special('lambda'),
         list( Var('x'), Var('y') ),
-        list( Word('+'), Var('x'), Var('y') ),
+        list( Special('if'),
+            list( Word('=='), Var('x'), Int(10) ),
+            list( Word('+'), Var('x'), Var('y') ),
+            list( Word('*'), Var('x'), Var('y') ),
+        )
     ),
-    Int(10),
+    Int(11),
     Int(20)
 );
 
-console.log(JSON.stringify(evaluate(expr, env), null, 4));
+DUMP( 'RESULT', evaluate( expr, env ), env );
 
 // -----------------------------------------------------------------------------
 
