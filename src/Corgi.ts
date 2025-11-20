@@ -186,10 +186,13 @@ const DEBUG = true;
 const LOG   = (d : number, msg : string, e : any = undefined) => console.log(`LOG[ ${d.toString().padStart(2, '0')} ] `, msg, e ? `${format(e)}` : '' );
 
 function evaluate (expr : Expr, env : Environment, depth : number = 0) : Expr {
-    if (DEBUG) console.log('-- TICK ', '-'.repeat(60));
-    if (DEBUG) console.log('ENV  : ', env.DUMP());
-    if (DEBUG) console.log('EXPR : ', format(expr));
-    if (DEBUG) console.log('-'.repeat(69));
+    if (DEBUG) {
+        console.group('-- TICK ', '-'.repeat(60));
+        console.log('%ENV  : ', env.DUMP());
+        console.log('@EXPR : ', format(expr));
+        console.groupEnd();
+        console.log('-'.repeat(69));
+    }
     switch (true) {
     case isCons(expr):
         if (DEBUG) LOG(depth, 'Got CONS');
@@ -259,12 +262,6 @@ env.assign( Word('+'), Native(
     }
 ));
 
-console.log(
-    format(
-        list( Word('+'), Int(20), list( Word('+'), Int(2), list( Word('+'), Int(20), list( Word('+'), Int(2), Int(5) ) ) ) )
-    )
-);
-
 let expr = list(
     list(
         Special('lambda'),
@@ -275,7 +272,6 @@ let expr = list(
     Int(20)
 );
 
-//console.log(JSON.stringify(expr, null, 4));
 console.log(JSON.stringify(evaluate(expr, env), null, 4));
 
 // -----------------------------------------------------------------------------
