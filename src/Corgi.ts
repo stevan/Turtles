@@ -13,14 +13,13 @@ type Int    = { type : 'INT', value : number  }
 type Float  = { type : 'FLT', value : number  }
 type String = { type : 'STR', value : string  }
 
+type Literal = Int | Float | String | Bool | Word
+
 type Nil  = { type : 'NIL' }
-type Cons = { type : 'CONS', head : Literal, tail : List }
-
-type Literal = Int | Float | String | Bool | Word | Nil
-
+type Cons = { type : 'CONS', head : Value, tail : List }
 type List = Cons | Nil
 
-type Expr = List | Literal
+type Value = Literal | List
 
 // -----------------------------------------------------------------------------
 
@@ -35,97 +34,98 @@ function isFalse  (v : any) : v is False  { return v.type == '*F*'  }
 function isList   (v : any) : v is List   { return isCons(v) || isNil(v) }
 function isBool   (v : any) : v is Bool   { return isTrue(v) || isFalse(v) }
 function isLiteral (v : any) : v is Literal {
-    return isInt(v) || isFloat(v) || isString(v) || isBool(v) || isWord(v) || isNil(v)
+    return isInt(v) || isFloat(v) || isString(v) || isBool(v) || isWord(v)
 }
-function isExpr (v : any) : v is Expr { return isLiteral(v) || isList(v) }
+function isValue (v : any) : v is Value { return isLiteral(v) || isList(v) }
 
 function assertWord    (v : any) : asserts v is Word    { if (!isWord(v))    throw new Error("Not Word")    }
 function assertInt     (v : any) : asserts v is Int     { if (!isInt(v))     throw new Error("Not Int")     }
 function assertFloat   (v : any) : asserts v is Float   { if (!isFloat(v))   throw new Error("Not Float")   }
 function assertString  (v : any) : asserts v is String  { if (!isString(v))  throw new Error("Not String")  }
-function assertNil     (v : any) : asserts v is Nil     { if (!isNil(v))     throw new Error("Not Nil")     }
-function assertCons    (v : any) : asserts v is Cons    { if (!isCons(v))    throw new Error("Not Cons")    }
 function assertTrue    (v : any) : asserts v is True    { if (!isTrue(v))    throw new Error("Not True")    }
 function assertFalse   (v : any) : asserts v is False   { if (!isFalse(v))   throw new Error("Not False")   }
-function assertList    (v : any) : asserts v is List    { if (!isList(v))    throw new Error("Not List")    }
 function assertBool    (v : any) : asserts v is Bool    { if (!isBool(v))    throw new Error("Not Bool")    }
+function assertNil     (v : any) : asserts v is Nil     { if (!isNil(v))     throw new Error("Not Nil")     }
+function assertCons    (v : any) : asserts v is Cons    { if (!isCons(v))    throw new Error("Not Cons")    }
+function assertList    (v : any) : asserts v is List    { if (!isList(v))    throw new Error("Not List")    }
 function assertLiteral (v : any) : asserts v is Literal { if (!isLiteral(v)) throw new Error("Not Literal") }
-function assertExpr    (v : any) : asserts v is Expr    { if (!isExpr(v))    throw new Error("Not Expr")    }
+function assertValue   (v : any) : asserts v is Value   { if (!isValue(v))   throw new Error("Not Value")   }
 
 // -----------------------------------------------------------------------------
 
-function $Word (ident : Ident) : Word { return { type : 'WORD', ident  } }
+function Word (ident : Ident) : Word { return { type : 'WORD', ident  } }
 
-function $True  () : True  { return { type : '*T*' } }
-function $False () : False { return { type : '*F*' } }
+function True  () : True  { return { type : '*T*' } }
+function False () : False { return { type : '*F*' } }
 
-function $Int    (value : number) : Int    { return { type : 'INT', value } }
-function $Float  (value : number) : Float  { return { type : 'FLT', value } }
-function $String (value : string) : String { return { type : 'STR', value } }
+function Int    (value : number) : Int    { return { type : 'INT', value } }
+function Float  (value : number) : Float  { return { type : 'FLT', value } }
+function String (value : string) : String { return { type : 'STR', value } }
 
-function $Nil  () : Nil { return { type : 'NIL'} }
-function $Cons (head : Literal, tail : List) : List {
+function Nil  () : Nil { return { type : 'NIL'} }
+function Cons (head : Value, tail : List) : List {
     return { type : 'CONS', head, tail }
 }
 
-function $List (...items : Literal[]) : List {
-    if (items.length == 0) {
-        return $Nil();
-    }
+// -----------------------------------------------------------------------------
 
-    let next = items.pop();
-    assertLiteral(next);
-
-    let list = $Cons(next, $Nil());
+function list (...items : Value[]) : List {
+    let list : List = Nil();
     while (items.length > 0) {
         let next = items.pop();
-        assertLiteral(next);
-        list = $Cons(next, list);
+        assertValue(next);
+        list = Cons(next, list);
     }
     return list;
 }
 
-// -----------------------------------------------------------------------------
-
-function head (l : List) : Literal {
-    assertList(l);
-    if (l.type == 'NIL') return l;
+function head (l : List) : Value {
+    if (isNil(l)) return l;
     return l.head;
 }
 
 function tail (l : List) : List {
-    assertList(l);
-    if (l.type == 'NIL') return l;
+    if (isNil(l)) return l;
     return l.tail;
 }
 
 // -----------------------------------------------------------------------------
 
-class Environment extends Map<Ident, any> {}
+class Environment extends Map<Ident, any> {
+
+    lookup (word : Word) : any {
+        let bif = env.get(word.ident);
+        if (bif == undefined) throw new Error(`Unable to find ${word.ident} in E`);
+        return bif;
+    }
+
+}
 
 // -----------------------------------------------------------------------------
 
-function isApplication (expr : Expr) : expr is List    { return isList(expr) && isWord(head(expr)) }
-function isValue       (expr : Expr) : expr is Literal { return isLiteral(expr) }
+type Expr = Value
 
-function evaluate (expr : Expr, env : Environment) : Literal {
-    switch (true) {
-    case isApplication(expr):
+function evaluate (expr : Expr, env : Environment) : Value {
 
-        let word = head(expr);
-        assertWord(word);
-
-        let bif  = env.get(word.ident);
-        if (bif == undefined) throw new Error(`Unable to find ${word.ident} in E`);
-
-        let rest = tail(expr);
+    const flattenList = (l : List) : Value[] => {
         let args = [];
+        let rest = l;
         while (!isNil(rest)) {
-            args.push( evaluate( head(rest), env ) );
+            args.push( head(rest) )
             rest = tail(rest);
         }
+        return args;
+    }
 
-        return bif( ...args );
+    switch (true) {
+    case isList(expr):
+        let word = head(expr);
+        if (isWord(word)) {
+            let bif = env.lookup(word);
+            return bif( ...flattenList(tail(expr)).map((arg) => evaluate(arg, env)) );
+        } else {
+            return list( ...flattenList(expr).map((arg) => evaluate(arg, env)) );
+        }
     case isValue(expr):
         return expr;
     default:
@@ -137,15 +137,15 @@ function evaluate (expr : Expr, env : Environment) : Literal {
 
 let env = new Environment();
 
-env.set('+', (lhs : Literal, rhs : Literal) : Literal => {
+env.set('+', (lhs : Value, rhs : Value) : Value => {
     assertInt(lhs);
     assertInt(rhs);
-    return $Int(lhs.value + rhs.value);
+    return Int(lhs.value + rhs.value);
 });
 
-let expr = $List( $Word('+'), $Int(20), $Int(10) );
+let expr = list( Int(20), list( Word('+'), Int(2), list( Word('+'), Int(20), list( Word('+'), Int(2), Int(5) ) ) ) );
 
-console.log(evaluate(expr, env));
+console.log(JSON.stringify(evaluate(expr, env), null, 4));
 
 // -----------------------------------------------------------------------------
 
