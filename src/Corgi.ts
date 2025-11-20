@@ -183,7 +183,7 @@ class Environment {
 // -----------------------------------------------------------------------------
 
 const DEBUG = true;
-const LOG   = (d : number, msg : string, e : any = undefined) => console.log(`[ ${d.toString().padStart(2, '0')} ] `, msg, e ? `${format(e)}` : '' );
+const LOG   = (d : number, msg : string, e : any = undefined) => console.log(`LOG[ ${d.toString().padStart(2, '0')} ] `, msg, e ? `${format(e)}` : '' );
 
 function evaluate (expr : Expr, env : Environment, depth : number = 0) : Expr {
     if (DEBUG) console.log('-- TICK ', '-'.repeat(60));
