@@ -194,6 +194,11 @@ const DUMP = (label : string, expr : Expr, env : Environment) => {
     console.log('-'.repeat(80));
 }
 
+
+function run (expr : Expr, env : Environment) : Expr {
+    return evaluate( expr, env );
+}
+
 function evaluate (expr : Expr, env : Environment, depth : number = 0) : Expr {
     if (DEBUG) DUMP( 'TICK', expr, env );
     switch (true) {
@@ -309,7 +314,7 @@ let expr = list(
     Int(20)
 );
 
-DUMP( 'RESULT', evaluate( expr, env ), env );
+DUMP( 'RESULT', run( expr, env ), env );
 
 // -----------------------------------------------------------------------------
 
