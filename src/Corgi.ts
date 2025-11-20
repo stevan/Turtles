@@ -1,5 +1,7 @@
 // -----------------------------------------------------------------------------
 
+type BuiltinFunction = ( args : Value[] ) => Value
+
 type Ident = string
 
 type True   = { type : '*T*' }
@@ -19,10 +21,12 @@ type Cons = { type : 'CONS', head : Value, tail : List }
 type List = Cons | Nil
 
 type Lambda = { type : 'LAMBDA', params : List, body: List }
-type Word   = { type : 'WORD', ident : Ident }
 type Var    = { type : 'VAR',  ident : Ident }
 
-type Value = Literal | List | Lambda | Word | Var
+type Word   = { type : 'WORD', ident : Ident } // names for builtins, special forms, etc.
+type Native = { type : 'BIF', bif : BuiltinFunction }
+
+type Value = Word | Literal | List | Lambda | Var | Native
 
 // -----------------------------------------------------------------------------
 
@@ -35,6 +39,7 @@ function isCons   (v : any) : v is Cons   { return v.type == 'CONS' }
 function isTrue   (v : any) : v is True   { return v.type == '*T*'  }
 function isFalse  (v : any) : v is False  { return v.type == '*F*'  }
 function isVar    (v : any) : v is Var    { return v.type == 'VAR'  }
+function isNative (v : any) : v is Native { return v.type == 'BIF'  }
 function isLambda (v : any) : v is Lambda { return v.type == 'LAMBDA' }
 function isList   (v : any) : v is List   { return isCons(v) || isNil(v) }
 function isBool   (v : any) : v is Bool   { return isTrue(v) || isFalse(v) }
@@ -42,7 +47,7 @@ function isLiteral (v : any) : v is Literal {
     return isInt(v) || isFloat(v) || isString(v) || isBool(v)
 }
 function isValue (v : any) : v is Value {
-    return isLiteral(v) || isList(v) || isLambda(v) || isWord(v) || isVar(v)
+    return isLiteral(v) || isList(v) || isLambda(v) || isWord(v) || isVar(v) || isNative(v)
 }
 
 function assertInt     (v : any) : asserts v is Int     { if (!isInt(v))     throw new Error("Not Int")     }
@@ -55,6 +60,7 @@ function assertNil     (v : any) : asserts v is Nil     { if (!isNil(v))     thr
 function assertCons    (v : any) : asserts v is Cons    { if (!isCons(v))    throw new Error("Not Cons")    }
 function assertList    (v : any) : asserts v is List    { if (!isList(v))    throw new Error("Not List")    }
 function assertLambda  (v : any) : asserts v is Lambda  { if (!isLambda(v))  throw new Error("Not Lambda")  }
+function assertNative  (v : any) : asserts v is Native  { if (!isNative(v))  throw new Error("Not Native")  }
 function assertWord    (v : any) : asserts v is Word    { if (!isWord(v))    throw new Error("Not Word")    }
 function assertVar     (v : any) : asserts v is Var     { if (!isVar(v))     throw new Error("Not Var")     }
 function assertLiteral (v : any) : asserts v is Literal { if (!isLiteral(v)) throw new Error("Not Literal") }
@@ -63,7 +69,6 @@ function assertValue   (v : any) : asserts v is Value   { if (!isValue(v))   thr
 // -----------------------------------------------------------------------------
 
 function Word (ident : Ident) : Word { return { type : 'WORD', ident } }
-function Var  (ident : Ident) : Var  { return { type : 'VAR',  ident } }
 
 function True  () : True  { return { type : '*T*' } }
 function False () : False { return { type : '*F*' } }
@@ -77,8 +82,14 @@ function Cons (head : Value, tail : List) : List {
     return { type : 'CONS', head, tail }
 }
 
+function Var (ident : Ident) : Var  { return { type : 'VAR', ident } }
+
 function Lambda (params : List, body : List) : Lambda {
     return { type : 'LAMBDA', params, body }
+}
+
+function Native (bif : BuiltinFunction) : Native {
+    return { type : 'BIF', bif }
 }
 
 // -----------------------------------------------------------------------------
@@ -105,32 +116,19 @@ function tail (l : List) : List {
 
 // -----------------------------------------------------------------------------
 
-type Native = (args : Value[]) => Value
+type EnvKey = Word | Var
 
-class Environment {
-    public builtins : Map<Ident, Native> = new Map<Ident, Native>();
-    public locals   : Map<Ident, Value>  = new Map<Ident, Value>();
+class Environment extends Map<Ident, Value> {
 
-    addBuiltin (ident : Ident, bif : Native) : void {
-        this.builtins.set(ident, bif);
+    lookup (name : EnvKey) : Value {
+        let result = this.get(name.ident);
+        if (result == undefined) throw new Error(`Unable to find ${name.type}(${name.ident}) in E`);
+        return result;
     }
 
-    lookupBuiltin (word : Word) : any {
-        let bif = this.builtins.get(word.ident);
-        if (bif == undefined) throw new Error(`Unable to find ${word.ident} in E.builtins`);
-        return bif;
+    set (key : EnvKey, val : Value) : void {
+        this.set(key.ident, val);
     }
-
-    addVar (v : Var, val : Value) : void {
-        this.locals.set(v.ident, val);
-    }
-
-    lookupVar (v : Var) : Value {
-        let value = this.locals.get(v.ident);
-        if (value == undefined) throw new Error(`Unable to find ${v.ident} in E.locals`);
-        return value;
-    }
-
 }
 
 // -----------------------------------------------------------------------------
@@ -161,7 +159,7 @@ function evaluate (expr : Value, env : Environment, depth : number = 0) : Value 
                 return Lambda( params, body );
             default:
                 if (DEBUG) LOG(depth, 'Got CONS HEAD? WORD? *BIF*', top);
-                let bif = env.lookupBuiltin(top);
+                let bif = env.lookup(top);
                 return bif( deCons( evaluate(tail(expr), env, depth + 1) as List ) );
             }
         case isLambda(top):
@@ -175,7 +173,7 @@ function evaluate (expr : Value, env : Environment, depth : number = 0) : Value 
                 let arg   = args[i];
                 assertVar(param);
                 assertValue(arg);
-                env.addVar(param, arg);
+                env.set(param, arg);
             }
 
             return evaluate( top.body, env );
@@ -185,7 +183,7 @@ function evaluate (expr : Value, env : Environment, depth : number = 0) : Value 
         }
     case isVar(expr):
         if (DEBUG) LOG(depth, 'Got VAR', expr);
-        return env.lookupVar(expr);
+        return env.lookup(expr);
     case isValue(expr):
         if (DEBUG) LOG(depth, 'Got VAL', expr);
         return expr;
