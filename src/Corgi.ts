@@ -24,7 +24,7 @@ type Lambda = { type : 'LAMBDA', params : List, body: List }
 type Var    = { type : 'VAR',  ident : Ident }
 
 type Word   = { type : 'WORD', ident : Ident } // names for builtins, special forms, etc.
-type Native = { type : 'BIF', bif : BuiltinFunction }
+type Native = { type : 'BIF', call : BuiltinFunction }
 
 type Value = Word | Literal | List | Lambda | Var | Native
 
@@ -89,7 +89,7 @@ function Lambda (params : List, body : List) : Lambda {
 }
 
 function Native (bif : BuiltinFunction) : Native {
-    return { type : 'BIF', bif }
+    return { type : 'BIF', call : bif }
 }
 
 // -----------------------------------------------------------------------------
@@ -126,7 +126,7 @@ class Environment extends Map<Ident, Value> {
         return result;
     }
 
-    set (key : EnvKey, val : Value) : void {
+    assign (key : EnvKey, val : Value) : void {
         this.set(key.ident, val);
     }
 }
@@ -160,7 +160,8 @@ function evaluate (expr : Value, env : Environment, depth : number = 0) : Value 
             default:
                 if (DEBUG) LOG(depth, 'Got CONS HEAD? WORD? *BIF*', top);
                 let bif = env.lookup(top);
-                return bif( deCons( evaluate(tail(expr), env, depth + 1) as List ) );
+                assertNative(bif);
+                return bif.call( deCons( evaluate(tail(expr), env, depth + 1) as List ) );
             }
         case isLambda(top):
             if (DEBUG) LOG(depth, 'Got CONS HEAD? LAMBDA', top);
@@ -173,7 +174,7 @@ function evaluate (expr : Value, env : Environment, depth : number = 0) : Value 
                 let arg   = args[i];
                 assertVar(param);
                 assertValue(arg);
-                env.set(param, arg);
+                env.assign(param, arg);
             }
 
             return evaluate( top.body, env );
@@ -196,12 +197,12 @@ function evaluate (expr : Value, env : Environment, depth : number = 0) : Value 
 
 let env = new Environment();
 
-env.addBuiltin('+', (args : Value[]) : Value => {
+env.assign(Word('+'), Native((args : Value[]) : Value => {
     let [ lhs, rhs ] = args;
     assertInt(lhs);
     assertInt(rhs);
     return Int(lhs.value + rhs.value);
-});
+}));
 
 //let expr = list( Word('+'), Int(20), list( Word('+'), Int(2), list( Word('+'), Int(20), list( Word('+'), Int(2), Int(5) ) ) ) );
 
