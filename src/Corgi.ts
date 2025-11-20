@@ -1,15 +1,17 @@
 // -----------------------------------------------------------------------------
+// Core Types
+// -----------------------------------------------------------------------------
 
 type True   = { type : '*T*', value : true  }
 type False  = { type : '*F*', value : false }
 
 type Bool = True | False
 
-type Int    = { type : 'INT', value : number  }
-type Float  = { type : 'FLT', value : number  }
-type String = { type : 'STR', value : string  }
+type Int = { type : 'INT', value : number  }
+type Flt = { type : 'FLT', value : number  }
+type Str = { type : 'STR', value : string  }
 
-type Literal = Int | Float | String | Bool
+type Literal = Int | Flt | Str | Bool
 
 type Nil  = { type : 'NIL' }
 type Cons = { type : 'CONS', head : Expr, tail : List }
@@ -31,58 +33,66 @@ type Word    = { type : 'WORD',    ident : Ident }
 type Var     = { type : 'VAR',     ident : Ident }
 type Special = { type : 'SPECIAL', ident : Ident }
 
-type Expr = Literal | List | Callable  | Word | Var | Special
+type Identifier = Word | Var | Special
+
+type Expr = Literal | List | Callable | Identifier
 
 // -----------------------------------------------------------------------------
+// Type Checkers & Assertions
+// -----------------------------------------------------------------------------
 
-function isWord     (v : any) : v is Word     { return v.type == 'WORD' }
-function isVar      (v : any) : v is Var      { return v.type == 'VAR'  }
-function isInt      (v : any) : v is Int      { return v.type == 'INT'  }
-function isFloat    (v : any) : v is Float    { return v.type == 'FLT'  }
-function isString   (v : any) : v is String   { return v.type == 'STR'  }
-function isNil      (v : any) : v is Nil      { return v.type == 'NIL'  }
-function isCons     (v : any) : v is Cons     { return v.type == 'CONS' }
-function isTrue     (v : any) : v is True     { return v.type == '*T*'  }
-function isFalse    (v : any) : v is False    { return v.type == '*F*'  }
-function isFExpr    (v : any) : v is FExpr    { return v.type == 'FEXPR'   }
-function isNative   (v : any) : v is Native   { return v.type == 'NATIVE'  }
-function isLambda   (v : any) : v is Lambda   { return v.type == 'LAMBDA'  }
-function isSpecial  (v : any) : v is Special  { return v.type == 'SPECIAL' }
-function isList     (v : any) : v is List     { return isCons(v)    || isNil(v)    }
-function isBool     (v : any) : v is Bool     { return isTrue(v)    || isFalse(v)  }
-function isCallable (v : any) : v is Callable { return isNative(v)  || isLambda(v) || isFExpr(v) }
-function isLiteral  (v : any) : v is Literal  { return isInt(v)  || isFloat(v) || isString(v)  || isBool(v) }
-function isExpr     (v : any) : v is Expr     { return isList(v) || isWord(v)  || isLiteral(v) || isCallable(v) || isVar(v) || isSpecial(v) }
+function isWord       (v : any) : v is Word       { return v.type == 'WORD' }
+function isVar        (v : any) : v is Var        { return v.type == 'VAR'  }
+function isInt        (v : any) : v is Int        { return v.type == 'INT'  }
+function isFlt        (v : any) : v is Flt        { return v.type == 'FLT'  }
+function isStr        (v : any) : v is Str        { return v.type == 'STR'  }
+function isNil        (v : any) : v is Nil        { return v.type == 'NIL'  }
+function isCons       (v : any) : v is Cons       { return v.type == 'CONS' }
+function isTrue       (v : any) : v is True       { return v.type == '*T*'  }
+function isFalse      (v : any) : v is False      { return v.type == '*F*'  }
+function isFExpr      (v : any) : v is FExpr      { return v.type == 'FEXPR'   }
+function isNative     (v : any) : v is Native     { return v.type == 'NATIVE'  }
+function isLambda     (v : any) : v is Lambda     { return v.type == 'LAMBDA'  }
+function isSpecial    (v : any) : v is Special    { return v.type == 'SPECIAL' }
+function isList       (v : any) : v is List       { return isCons(v)    || isNil(v)    }
+function isBool       (v : any) : v is Bool       { return isTrue(v)    || isFalse(v)  }
+function isCallable   (v : any) : v is Callable   { return isNative(v)  || isLambda(v) || isFExpr(v) }
+function isIdentifier (v : any) : v is Identifier { return isWord(v)    || isVar(v)    || isSpecial(v) }
+function isLiteral    (v : any) : v is Literal    { return isInt(v)  || isFlt(v) || isStr(v)  || isBool(v) }
+function isExpr       (v : any) : v is Expr       { return isList(v) || isLiteral(v) || isCallable(v) || isIdentifier(v) }
 
-function assertInt      (v : any) : asserts v is Int      { if (!isInt(v))      throw new Error("Not Int")      }
-function assertFloat    (v : any) : asserts v is Float    { if (!isFloat(v))    throw new Error("Not Float")    }
-function assertString   (v : any) : asserts v is String   { if (!isString(v))   throw new Error("Not String")   }
-function assertTrue     (v : any) : asserts v is True     { if (!isTrue(v))     throw new Error("Not True")     }
-function assertFalse    (v : any) : asserts v is False    { if (!isFalse(v))    throw new Error("Not False")    }
-function assertBool     (v : any) : asserts v is Bool     { if (!isBool(v))     throw new Error("Not Bool")     }
-function assertNil      (v : any) : asserts v is Nil      { if (!isNil(v))      throw new Error("Not Nil")      }
-function assertCons     (v : any) : asserts v is Cons     { if (!isCons(v))     throw new Error("Not Cons")     }
-function assertList     (v : any) : asserts v is List     { if (!isList(v))     throw new Error("Not List")     }
-function assertFExpr    (v : any) : asserts v is FExpr    { if (!isFExpr(v))    throw new Error("Not FExpr")    }
-function assertLambda   (v : any) : asserts v is Lambda   { if (!isLambda(v))   throw new Error("Not Lambda")   }
-function assertNative   (v : any) : asserts v is Native   { if (!isNative(v))   throw new Error("Not Native")   }
-function assertSpecial  (v : any) : asserts v is Special  { if (!isSpecial(v))  throw new Error("Not Special")  }
-function assertVar      (v : any) : asserts v is Var      { if (!isVar(v))      throw new Error("Not Var")      }
-function assertWord     (v : any) : asserts v is Word     { if (!isWord(v))     throw new Error("Not Word")     }
-function assertCallable (v : any) : asserts v is Callable { if (!isCallable(v)) throw new Error("Not Callable") }
-function assertLiteral  (v : any) : asserts v is Literal  { if (!isLiteral(v))  throw new Error("Not Literal")  }
-function assertExpr     (v : any) : asserts v is Expr     { if (!isExpr(v))     throw new Error("Not Expr")     }
+function assertInt        (v : any) : asserts v is Int        { if (!isInt(v))        throw new Error("Not Int")        }
+function assertFlt        (v : any) : asserts v is Flt        { if (!isFlt(v))        throw new Error("Not Flt")        }
+function assertStr        (v : any) : asserts v is Str        { if (!isStr(v))        throw new Error("Not Str")        }
+function assertTrue       (v : any) : asserts v is True       { if (!isTrue(v))       throw new Error("Not True")       }
+function assertFalse      (v : any) : asserts v is False      { if (!isFalse(v))      throw new Error("Not False")      }
+function assertBool       (v : any) : asserts v is Bool       { if (!isBool(v))       throw new Error("Not Bool")       }
+function assertNil        (v : any) : asserts v is Nil        { if (!isNil(v))        throw new Error("Not Nil")        }
+function assertCons       (v : any) : asserts v is Cons       { if (!isCons(v))       throw new Error("Not Cons")       }
+function assertList       (v : any) : asserts v is List       { if (!isList(v))       throw new Error("Not List")       }
+function assertFExpr      (v : any) : asserts v is FExpr      { if (!isFExpr(v))      throw new Error("Not FExpr")      }
+function assertLambda     (v : any) : asserts v is Lambda     { if (!isLambda(v))     throw new Error("Not Lambda")     }
+function assertNative     (v : any) : asserts v is Native     { if (!isNative(v))     throw new Error("Not Native")     }
+function assertSpecial    (v : any) : asserts v is Special    { if (!isSpecial(v))    throw new Error("Not Special")    }
+function assertVar        (v : any) : asserts v is Var        { if (!isVar(v))        throw new Error("Not Var")        }
+function assertWord       (v : any) : asserts v is Word       { if (!isWord(v))       throw new Error("Not Word")       }
+function assertCallable   (v : any) : asserts v is Callable   { if (!isCallable(v))   throw new Error("Not Callable")   }
+function assertIdentifier (v : any) : asserts v is Identifier { if (!isIdentifier(v)) throw new Error("Not Identifier") }
+function assertLiteral    (v : any) : asserts v is Literal    { if (!isLiteral(v))    throw new Error("Not Literal")    }
+function assertExpr       (v : any) : asserts v is Expr       { if (!isExpr(v))       throw new Error("Not Expr")       }
 
+// -----------------------------------------------------------------------------
+// Constructors
 // -----------------------------------------------------------------------------
 
 function True  () : True  { return { type : '*T*', value : true  } }
 function False () : False { return { type : '*F*', value : false } }
 
-function Int    (value : number) : Int    { return { type : 'INT', value } }
-function Float  (value : number) : Float  { return { type : 'FLT', value } }
-function String (value : string) : String { return { type : 'STR', value } }
+function Int (value : number) : Int { return { type : 'INT', value } }
+function Flt (value : number) : Flt { return { type : 'FLT', value } }
+function Str (value : string) : Str { return { type : 'STR', value } }
 
-function Nil  ()                          : Nil  { return { type : 'NIL'} }
+function Nil  ()                         : Nil  { return { type : 'NIL'} }
 function Cons (head : Expr, tail : List) : List { return { type : 'CONS', head, tail } }
 
 function Lambda (params : List, body : List)        : Lambda { return { type : 'LAMBDA', params, body } }
@@ -94,27 +104,7 @@ function Var     (ident : Ident) : Var     { return { type : 'VAR',     ident } 
 function Special (ident : Ident) : Special { return { type : 'SPECIAL', ident } }
 
 // -----------------------------------------------------------------------------
-
-function format (expr : Expr) : string {
-    switch (true) {
-    case isTrue(expr)    : return 'true';
-    case isFalse(expr)   : return 'false';
-    case isInt(expr)     :
-    case isFloat(expr)   : return expr.value.toString();
-    case isString(expr)  : return expr.value;
-    case isNil(expr)     : return '()';
-    case isCons(expr)    : return `(${ flatten(expr).map(format).join(' ') })`;
-    case isWord(expr)    :
-    case isVar(expr)     :
-    case isSpecial(expr) : return expr.ident;
-    case isLambda(expr)  : return `(lambda ${format(expr.params)} ${format(expr.body)})`;
-    case isNative(expr)  : return `(native ${format(expr.params)} #:native)`;
-    case isFExpr(expr)   : return `(fexpr ${format(expr.params)} @:fexpr)`;
-    default:
-        return 'XXX'
-    }
-}
-
+// List helpers
 // -----------------------------------------------------------------------------
 
 function list (...items : Expr[]) : List {
@@ -147,9 +137,90 @@ function flatten (l : List) : Expr[] {
     return [ head(l), ...flatten( tail(l) ) ]
 }
 
+
+// -----------------------------------------------------------------------------
+// Deparser
 // -----------------------------------------------------------------------------
 
-type EnvKey = Word | Special | Var
+function format (expr : Expr) : string {
+    switch (true) {
+    case isTrue(expr)    : return 'true';
+    case isFalse(expr)   : return 'false';
+    case isInt(expr)     :
+    case isFlt(expr)     : return expr.value.toString();
+    case isStr(expr)     : return expr.value;
+    case isNil(expr)     : return '()';
+    case isCons(expr)    : return `(${ flatten(expr).map(format).join(' ') })`;
+    case isWord(expr)    :
+    case isVar(expr)     :
+    case isSpecial(expr) : return expr.ident;
+    case isLambda(expr)  : return `(lambda ${format(expr.params)} ${format(expr.body)})`;
+    case isNative(expr)  : return `(native ${format(expr.params)} #:native)`;
+    case isFExpr(expr)   : return `(fexpr ${format(expr.params)} @:fexpr)`;
+    default:
+        return 'XXX'
+    }
+}
+
+// -----------------------------------------------------------------------------
+// Parser
+// -----------------------------------------------------------------------------
+
+type SExpr = Expr | SExpr[];
+
+function tokenizer ( src : string ) : string[] {
+    return src.replace(/\(/g, ' ( ')
+              .replace(/\)/g, ' ) ')
+              .trim()
+              .split(/\s+/)
+              .filter(Boolean);
+}
+
+function lexer ( token : string ) : Expr {
+    switch (true) {
+    case token == 'true'  : return True();
+    case token == 'false' : return False();
+    case !isNaN(Number(token)) && Math.trunc(Number(token)) == Number(token) : return Int(Number(token));
+    case !isNaN(Number(token)) && Math.trunc(Number(token)) != Number(token) : return Flt(Number(token));
+    case  isNaN(Number(token)) : return Word(token);
+    default:
+        throw new Error(`Huh?`)
+    }
+}
+
+function parseList ( ts : string[], acc : SExpr[] ) : [ SExpr[], string[] ] {
+    if (ts[0] === ')') return [ acc, ts.slice(1) ];
+    let [ expr, remaining ] = parseTokens(ts);
+    return parseList( remaining, [ ...acc, expr ] );
+}
+
+function parseTokens ( tokens : string[] ) : [ SExpr, string[] ] {
+    let token = tokens[0];
+    if (token == undefined) throw new Error('Undefined Token');
+
+    let rest = tokens.slice(1);
+    if (token == '(') return parseList( rest, [] );
+
+    return [ lexer(token), rest ];
+}
+
+function buildTree ( sexpr : SExpr ) : Expr {
+    if (Array.isArray(sexpr)) {
+        return list( ...sexpr.map(buildTree) )
+    } else {
+        assertExpr(sexpr)
+        return sexpr;
+    }
+}
+
+function parse ( src : string ) : Expr {
+    let [ sexpr, rest ] = parseTokens( tokenizer( src ) );
+    return buildTree( sexpr );
+}
+
+// -----------------------------------------------------------------------------
+// Environment
+// -----------------------------------------------------------------------------
 
 type MaybeEnvironment = Environment | undefined;
 
@@ -161,13 +232,13 @@ class Environment {
         this.parent = parent;
     }
 
-    lookup (name : EnvKey) : Expr {
+    lookup (name : Identifier) : Expr {
         let result = this.bindings.get(name.ident) ?? this.parent?.lookup(name);
         if (result == undefined) throw new Error(`Unable to find ${name.type}(${name.ident}) in E`);
         return result;
     }
 
-    assign (key : EnvKey, val : Expr) : void {
+    assign (key : Identifier, val : Expr) : void {
         this.bindings.set(key.ident, val);
     }
 
@@ -180,6 +251,8 @@ class Environment {
     }
 }
 
+// -----------------------------------------------------------------------------
+// Interpreter
 // -----------------------------------------------------------------------------
 
 const DEBUG = true;
@@ -221,7 +294,7 @@ function evaluate (expr : Expr, env : Environment, depth : number = 0) : Expr {
             for (let i = 0; i < params.length; i++) {
                 let param = params[i];
                 let arg   = args[i];
-                assertVar(param);
+                assertIdentifier(param);
                 assertExpr(arg);
                 localE.assign(param, arg);
             }
@@ -230,14 +303,14 @@ function evaluate (expr : Expr, env : Environment, depth : number = 0) : Expr {
             if (DEBUG) LOG(depth, '*LIST*');
             return Cons( top, evaluate(tail(expr), env, depth + 1) as List );
         }
-    case isVar(expr):
-    case isWord(expr):
-    case isSpecial(expr):
-        if (DEBUG) LOG(depth, 'Got Var | Word | Special', expr);
+    case isIdentifier(expr):
+        if (DEBUG) LOG(depth, 'Got Idenfifier = Var | Word | Special', expr);
         return env.lookup(expr);
     case isLiteral(expr):
+        if (DEBUG) LOG(depth, 'Got Literal', expr);
+        return expr;
     case isNil(expr):
-        if (DEBUG) LOG(depth, 'Got Literal | Nil', expr);
+        if (DEBUG) LOG(depth, '()', expr);
         return expr;
     default:
         throw new Error('WTF!');
@@ -245,12 +318,14 @@ function evaluate (expr : Expr, env : Environment, depth : number = 0) : Expr {
 }
 
 // -----------------------------------------------------------------------------
+// Built-in Environment
+// -----------------------------------------------------------------------------
 
 let env = new Environment();
 
 env.assign( Special('lambda'), FExpr(
     list( Var('params'), Var('body') ),
-    (args : Expr[]) : Expr => {
+    (args : Expr[], env : Environment) : Expr => {
         let [ params, body ] = args;
         assertList(params);
         assertList(body);
@@ -258,8 +333,8 @@ env.assign( Special('lambda'), FExpr(
     }
 ));
 
-env.assign(Special('if'), FExpr(
-    list(Var('cond'), Var('then'), Var('else')),
+env.assign( Special('if'), FExpr(
+    list( Var('cond'), Var('then'), Var('else') ),
     (args : Expr[], env : Environment) : Expr => {
       let [ cond, thenBranch, elseBranch ] = args;
       assertCons(cond);
@@ -300,21 +375,20 @@ env.assign( Word('*'), Native(
     }
 ));
 
-let expr = list(
-    list(
-        Special('lambda'),
-        list( Var('x'), Var('y') ),
-        list( Special('if'),
-            list( Word('=='), Var('x'), Int(10) ),
-            list( Word('+'), Var('x'), Var('y') ),
-            list( Word('*'), Var('x'), Var('y') ),
-        )
-    ),
-    Int(11),
-    Int(20)
-);
+// -----------------------------------------------------------------------------
+// Demo Program
+// -----------------------------------------------------------------------------
 
-DUMP( 'RESULT', run( expr, env ), env );
+let program = parse(`
+    ((lambda (x y)
+        (if (== x 10)
+            (+ x y)
+            (* x y))) 10 20)
+`);
+
+console.log(format(program));
+
+DUMP( 'RESULT', run( program, env ), env );
 
 // -----------------------------------------------------------------------------
 
