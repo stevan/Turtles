@@ -95,6 +95,28 @@ function Special (ident : Ident) : Special { return { type : 'SPECIAL', ident } 
 
 // -----------------------------------------------------------------------------
 
+function format (expr : Expr) : string {
+    switch (true) {
+    case isTrue(expr)    : return 'true';
+    case isFalse(expr)   : return 'false';
+    case isInt(expr)     :
+    case isFloat(expr)   : return expr.value.toString();
+    case isString(expr)  : return expr.value;
+    case isNil(expr)     : return '()';
+    case isCons(expr)    : return `(${ flatten(expr).map(format).join(' ') })`;
+    case isWord(expr)    :
+    case isVar(expr)     :
+    case isSpecial(expr) : return expr.ident;
+    case isLambda(expr)  : return `(lambda ${format(expr.params)} ${format(expr.body)})`;
+    case isNative(expr)  : return `(native ${format(expr.params)} #:native)`;
+    case isFExpr(expr)   : return `(fexpr ${format(expr.params)} @:fexpr)`;
+    default:
+        return 'XXX'
+    }
+}
+
+// -----------------------------------------------------------------------------
+
 function list (...items : Expr[]) : List {
     let list : List = Nil();
     while (items.length > 0) {
@@ -115,31 +137,59 @@ function tail (l : List) : List {
     return l.tail;
 }
 
+function map (l : List, f : (i : Expr) => Expr) : List {
+    if (isNil(l)) return l;
+    return Cons( f( head(l) ), map( tail(l), f ) );
+}
+
+function flatten (l : List) : Expr[] {
+    if (isNil(l)) return [];
+    return [ head(l), ...flatten( tail(l) ) ]
+}
+
 // -----------------------------------------------------------------------------
 
 type EnvKey = Word | Special | Var
 
-class Environment extends Map<Ident, Expr> {
+type MaybeEnvironment = Environment | undefined;
+
+class Environment {
+    public parent   : MaybeEnvironment;
+    public bindings : Map<Ident, Expr> = new Map<Ident, Expr>();
+
+    constructor (parent : MaybeEnvironment = undefined) {
+        this.parent = parent;
+    }
 
     lookup (name : EnvKey) : Expr {
-        let result = this.get(name.ident);
+        let result = this.bindings.get(name.ident) ?? this.parent?.lookup(name);
         if (result == undefined) throw new Error(`Unable to find ${name.type}(${name.ident}) in E`);
         return result;
     }
 
     assign (key : EnvKey, val : Expr) : void {
-        this.set(key.ident, val);
+        this.bindings.set(key.ident, val);
+    }
+
+    derive () : Environment { return new Environment( this ) }
+    depth  () : number      { return 1 + (this.parent?.depth() ?? 0) }
+
+    DUMP () : string {
+        return `%E[${this.depth()}]{${ [ ...this.bindings.keys() ].map((e) => ("`" + e)).join(', ') }} `
+            + (this.parent == undefined ? '' : ` ^(${ this.parent?.DUMP() })`)
     }
 }
 
 // -----------------------------------------------------------------------------
 
 const DEBUG = true;
-const LOG   = (d : number, msg : string, e : any = undefined) => console.log('  '.repeat(d), msg, e ? `<${e.type}>` : '' );
-
-const deCons = (l : List) : Expr[] => isNil(l) ? [] : [ head(l), ...deCons(tail(l)) ]
+const LOG   = (d : number, msg : string, e : any = undefined) => console.log(`[ ${d.toString().padStart(2, '0')} ] `, msg, e ? `${format(e)}` : '' );
 
 function evaluate (expr : Expr, env : Environment, depth : number = 0) : Expr {
+    if (DEBUG) console.log('-- TICK ', '-'.repeat(60));
+    if (DEBUG) console.log('ENV  : ', env.DUMP());
+    if (DEBUG) console.log('EXPR : ', format(expr));
+    if (DEBUG) console.log('-'.repeat(69));
     switch (true) {
     case isCons(expr):
         if (DEBUG) LOG(depth, 'Got CONS');
@@ -148,22 +198,23 @@ function evaluate (expr : Expr, env : Environment, depth : number = 0) : Expr {
         switch (true) {
         case isFExpr(top):
             if (DEBUG) LOG(depth, '++ APPLY *FEXPR*', top);
-            return top.body( deCons( tail(expr) ) );
+            return top.body( flatten( tail(expr) ) );
         case isNative(top):
             if (DEBUG) LOG(depth, '++ APPLY *NATIVE*', top);
-            return top.body( deCons( evaluate(tail(expr), env, depth + 1) as List ) );
+            return top.body( flatten( evaluate(tail(expr), env, depth + 1) as List ) );
         case isLambda(top):
             if (DEBUG) LOG(depth, '++ APPLY *LAMBDA*', top);
-            let params = deCons(top.params);
-            let args   = deCons(evaluate(tail(expr), env, depth + 1) as List);
+            let params = flatten(top.params);
+            let args   = flatten(evaluate(tail(expr), env, depth + 1) as List);
+            let localE = env.derive();
             for (let i = 0; i < params.length; i++) {
                 let param = params[i];
                 let arg   = args[i];
                 assertVar(param);
                 assertExpr(arg);
-                env.assign(param, arg);
+                localE.assign(param, arg);
             }
-            return evaluate( top.body, env );
+            return evaluate( top.body, localE );
         default:
             if (DEBUG) LOG(depth, '*LIST*');
             return Cons( top, evaluate(tail(expr), env, depth + 1) as List );
@@ -208,7 +259,11 @@ env.assign( Word('+'), Native(
     }
 ));
 
-//let expr = list( Word('+'), Int(20), list( Word('+'), Int(2), list( Word('+'), Int(20), list( Word('+'), Int(2), Int(5) ) ) ) );
+console.log(
+    format(
+        list( Word('+'), Int(20), list( Word('+'), Int(2), list( Word('+'), Int(20), list( Word('+'), Int(2), Int(5) ) ) ) )
+    )
+);
 
 let expr = list(
     list(
