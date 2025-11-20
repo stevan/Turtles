@@ -4,8 +4,7 @@ import * as AST from './AST'
 export function True  () : AST.True  { return { type : '*T*', value : true  } }
 export function False () : AST.False { return { type : '*F*', value : false } }
 
-export function Int (value : number) : AST.Int { return { type : 'INT', value } }
-export function Flt (value : number) : AST.Flt { return { type : 'FLT', value } }
+export function Num (value : number) : AST.Num { return { type : 'NUM', value } }
 export function Str (value : string) : AST.Str { return { type : 'STR', value } }
 
 export function Nil  ()                                 : AST.Nil  { return { type : 'NIL'} }

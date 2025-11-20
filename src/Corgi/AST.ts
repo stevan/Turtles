@@ -7,11 +7,10 @@ export type False  = { type : '*F*', value : false }
 
 export type Bool = True | False
 
-export type Int = { type : 'INT', value : number  }
-export type Flt = { type : 'FLT', value : number  }
+export type Num = { type : 'NUM', value : number  }
 export type Str = { type : 'STR', value : string  }
 
-export type Literal = Int | Flt | Str | Bool
+export type Literal = Num | Str | Bool
 
 export type Nil  = { type : 'NIL' }
 export type Cons = { type : 'CONS', head : Expr, tail : List }

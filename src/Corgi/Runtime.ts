@@ -8,8 +8,8 @@ import * as Parser   from './Parser'
 import { Environment } from './Environment'
 
 const DEBUG = true;
-const LOG   = (d : number, msg : string, e : any = undefined) =>
-    console.log(`LOG[ ${d.toString().padStart(2, '0')} ] ${msg} - `, e ? `${Parser.format(e)}` : '...' );
+const LOG   = (msg : string, e : any = undefined) =>
+    console.log(`LOG - ${msg} - `, e ? `${Parser.format(e)}` : '...' );
 
 export const DUMP = (label : string, expr : AST.Expr, env : Environment) => {
     console.group(`-- ${label} `, '-'.repeat(80 - (label.length + 5)));
@@ -19,49 +19,85 @@ export const DUMP = (label : string, expr : AST.Expr, env : Environment) => {
     console.log('-'.repeat(80));
 }
 
-export function evaluate (expr : AST.Expr, env : Environment, depth : number = 0) : AST.Expr {
+export function evaluate (expr : AST.Expr, env : Environment) : AST.Expr {
     if (DEBUG) DUMP( 'TICK', expr, env );
     switch (true) {
     case TypeUtil.isCons(expr):
-        if (DEBUG) LOG(depth, 'Got CONS');
-        let top = evaluate(ListUtil.head(expr), env, depth + 1);
-        if (DEBUG) LOG(depth, 'EVAL(h)?', top);
+        if (DEBUG) LOG('Got CONS');
+        let top = evaluate(ListUtil.head(expr), env);
         switch (true) {
-        case TypeUtil.isFExpr(top):
-            if (DEBUG) LOG(depth, '++ APPLY *FEXPR*', top);
-            return top.body( ListUtil.flatten( ListUtil.tail(expr) ), env );
-        case TypeUtil.isNative(top):
-            if (DEBUG) LOG(depth, '++ APPLY *NATIVE*', top);
-            return top.body( ListUtil.flatten( evaluate(ListUtil.tail(expr), env, depth + 1) as AST.List ) );
-        case TypeUtil.isLambda(top):
-            if (DEBUG) LOG(depth, '++ APPLY *LAMBDA*', top);
-            let params = ListUtil.flatten(top.params);
-            let args   = ListUtil.flatten(evaluate(ListUtil.tail(expr), env, depth + 1) as AST.List);
-            let localE = env.derive();
-            for (let i = 0; i < params.length; i++) {
-                let param = params[i];
-                let arg   = args[i];
-                TypeUtil.assertIdentifier(param);
-                TypeUtil.assertExpr(arg);
-                localE.assign(param, arg);
-            }
-            return evaluate( top.body, localE );
+        case TypeUtil.isCallable(top):
+            if (DEBUG) LOG('*CALL*', top);
+            return evaluateCall( top, ListUtil.tail(expr), env );
         default:
-            if (DEBUG) LOG(depth, '*LIST*');
-            return ASTUtil.Cons( top, evaluate(ListUtil.tail(expr), env, depth + 1) as AST.List );
+            if (DEBUG) LOG('*LIST*');
+            return ASTUtil.Cons( top, evaluate(ListUtil.tail(expr), env) as AST.List );
         }
     case TypeUtil.isIdentifier(expr):
-        if (DEBUG) LOG(depth, 'Got Idenfifier = Var | Word | Special', expr);
+        if (DEBUG) LOG('Got Idenfifier = Var | Word | Special', expr);
         return env.lookup(expr);
     case TypeUtil.isLiteral(expr):
-        if (DEBUG) LOG(depth, 'Got Literal', expr);
+        if (DEBUG) LOG('Got Literal', expr);
         return expr;
     case TypeUtil.isNil(expr):
-        if (DEBUG) LOG(depth, '()', expr);
+        if (DEBUG) LOG('()', expr);
         return expr;
     default:
         throw new Error('WTF!');
     }
+}
+
+function evaluateCall (top : AST.Callable, rest : AST.List, env : Environment) : AST.Expr {
+    switch (true) {
+    case TypeUtil.isFExpr(top):
+        if (DEBUG) LOG('++ APPLY *FEXPR*', top);
+        return top.body( ListUtil.flatten( rest ), env );
+    case TypeUtil.isNative(top):
+        if (DEBUG) LOG('++ APPLY *NATIVE*', top);
+        return top.body( ListUtil.flatten( evaluate( rest, env ) as AST.List ) );
+    case TypeUtil.isLambda(top):
+        if (DEBUG) LOG('++ APPLY *LAMBDA*', top);
+        let params = ListUtil.flatten(top.params);
+        let args   = ListUtil.flatten(evaluate( rest, env ) as AST.List);
+        let localE = env.derive();
+        for (let i = 0; i < params.length; i++) {
+            let param = params[i];
+            let arg   = args[i];
+            TypeUtil.assertIdentifier(param);
+            TypeUtil.assertExpr(arg);
+            localE.assign(param, arg);
+        }
+        return evaluate( top.body, localE );
+    default:
+        throw new Error(`Unknown Callable Type`);
+    }
+}
+
+type Predicate = (lhs : string | number | boolean, rhs : string | number | boolean) => boolean
+type NumBinOp  = (lhs : number, rhs : number) => number
+
+function liftPredicate (pred : Predicate) : AST.Native {
+    return ASTUtil.Native(
+        ListUtil.create( ASTUtil.Var('n'), ASTUtil.Var('m') ),
+        (args : AST.Expr[]) : AST.Expr => {
+            let [ lhs, rhs ] = args;
+            TypeUtil.assertLiteral(lhs);
+            TypeUtil.assertLiteral(rhs);
+            return pred(lhs.value, rhs.value) ? ASTUtil.True() : ASTUtil.False();
+        }
+    )
+}
+
+function liftNumBinOp (binop : NumBinOp) : AST.Native {
+    return ASTUtil.Native(
+        ListUtil.create( ASTUtil.Var('n'), ASTUtil.Var('m') ),
+        (args : AST.Expr[]) : AST.Expr => {
+            let [ lhs, rhs ] = args;
+            TypeUtil.assertNum(lhs);
+            TypeUtil.assertNum(rhs);
+            return ASTUtil.Num( binop(lhs.value, rhs.value) );
+        }
+    )
 }
 
 export function createRootEnvironment () : Environment {
@@ -77,6 +113,17 @@ export function createRootEnvironment () : Environment {
         }
     ));
 
+    env.assign( ASTUtil.Special('set!'), ASTUtil.FExpr(
+        ListUtil.create( ASTUtil.Var('name'), ASTUtil.Var('value') ),
+        (args : AST.Expr[], env : Environment) : AST.Expr => {
+            let [ name, value ] = args;
+            TypeUtil.assertIdentifier(name);
+            TypeUtil.assertExpr(value);
+            env.assign( name, evaluate( value, env ) );
+            return ASTUtil.Nil();
+        }
+    ));
+
     env.assign( ASTUtil.Special('if'), ASTUtil.FExpr(
         ListUtil.create( ASTUtil.Var('cond'), ASTUtil.Var('then'), ASTUtil.Var('else') ),
         (args : AST.Expr[], env : Environment) : AST.Expr => {
@@ -89,35 +136,19 @@ export function createRootEnvironment () : Environment {
         }
     ));
 
-    env.assign( ASTUtil.Word('=='), ASTUtil.Native(
-        ListUtil.create( ASTUtil.Var('n'), ASTUtil.Var('m') ),
-        (args : AST.Expr[]) : AST.Expr => {
-            let [ lhs, rhs ] = args;
-            TypeUtil.assertLiteral(lhs);
-            TypeUtil.assertLiteral(rhs);
-            return (lhs.value == rhs.value) ? ASTUtil.True() : ASTUtil.False();
-        }
-    ));
+    env.assign( ASTUtil.Word('=='), liftPredicate((n, m) => n == m));
+    env.assign( ASTUtil.Word('!='), liftPredicate((n, m) => n != m));
 
-    env.assign( ASTUtil.Word('+'), ASTUtil.Native(
-        ListUtil.create( ASTUtil.Var('n'), ASTUtil.Var('m') ),
-        (args : AST.Expr[]) : AST.Expr => {
-            let [ lhs, rhs ] = args;
-            TypeUtil.assertInt(lhs);
-            TypeUtil.assertInt(rhs);
-            return ASTUtil.Int(lhs.value + rhs.value);
-        }
-    ));
+    env.assign( ASTUtil.Word('>'),  liftPredicate((n, m) => n >  m));
+    env.assign( ASTUtil.Word('>='), liftPredicate((n, m) => n >= m));
+    env.assign( ASTUtil.Word('<='), liftPredicate((n, m) => n <= m));
+    env.assign( ASTUtil.Word('<'),  liftPredicate((n, m) => n <  m));
 
-    env.assign( ASTUtil.Word('*'), ASTUtil.Native(
-        ListUtil.create( ASTUtil.Var('n'), ASTUtil.Var('m') ),
-        (args : AST.Expr[]) : AST.Expr => {
-            let [ lhs, rhs ] = args;
-            TypeUtil.assertInt(lhs);
-            TypeUtil.assertInt(rhs);
-            return ASTUtil.Int(lhs.value * rhs.value);
-        }
-    ));
+    env.assign( ASTUtil.Word('+'),  liftNumBinOp((n, m) => n + m));
+    env.assign( ASTUtil.Word('-'),  liftNumBinOp((n, m) => n - m));
+    env.assign( ASTUtil.Word('*'),  liftNumBinOp((n, m) => n * m));
+    env.assign( ASTUtil.Word('/'),  liftNumBinOp((n, m) => n / m));
+    env.assign( ASTUtil.Word('%'),  liftNumBinOp((n, m) => n % m));
 
     return env;
 }

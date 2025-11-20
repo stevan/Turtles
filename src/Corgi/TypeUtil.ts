@@ -3,8 +3,7 @@ import * as AST from './AST'
 
 export function isWord       (v : any) : v is AST.Word       { return v.type == 'WORD' }
 export function isVar        (v : any) : v is AST.Var        { return v.type == 'VAR'  }
-export function isInt        (v : any) : v is AST.Int        { return v.type == 'INT'  }
-export function isFlt        (v : any) : v is AST.Flt        { return v.type == 'FLT'  }
+export function isNum        (v : any) : v is AST.Num        { return v.type == 'NUM'  }
 export function isStr        (v : any) : v is AST.Str        { return v.type == 'STR'  }
 export function isNil        (v : any) : v is AST.Nil        { return v.type == 'NIL'  }
 export function isCons       (v : any) : v is AST.Cons       { return v.type == 'CONS' }
@@ -14,15 +13,14 @@ export function isFExpr      (v : any) : v is AST.FExpr      { return v.type == 
 export function isNative     (v : any) : v is AST.Native     { return v.type == 'NATIVE'  }
 export function isLambda     (v : any) : v is AST.Lambda     { return v.type == 'LAMBDA'  }
 export function isSpecial    (v : any) : v is AST.Special    { return v.type == 'SPECIAL' }
-export function isList       (v : any) : v is AST.List       { return isCons(v)    || isNil(v)    }
-export function isBool       (v : any) : v is AST.Bool       { return isTrue(v)    || isFalse(v)  }
-export function isCallable   (v : any) : v is AST.Callable   { return isNative(v)  || isLambda(v) || isFExpr(v) }
-export function isIdentifier (v : any) : v is AST.Identifier { return isWord(v)    || isVar(v)    || isSpecial(v) }
-export function isLiteral    (v : any) : v is AST.Literal    { return isInt(v)  || isFlt(v) || isStr(v)  || isBool(v) }
-export function isExpr       (v : any) : v is AST.Expr       { return isList(v) || isLiteral(v) || isCallable(v) || isIdentifier(v) }
+export function isList       (v : any) : v is AST.List       { return isCons(v)   || isNil(v)   }
+export function isBool       (v : any) : v is AST.Bool       { return isTrue(v)   || isFalse(v) }
+export function isCallable   (v : any) : v is AST.Callable   { return isNative(v) || isLambda(v)  || isFExpr(v)   }
+export function isIdentifier (v : any) : v is AST.Identifier { return isWord(v)   || isVar(v)     || isSpecial(v) }
+export function isLiteral    (v : any) : v is AST.Literal    { return isNum(v)    || isStr(v)     || isBool(v)    }
+export function isExpr       (v : any) : v is AST.Expr       { return isList(v)   || isLiteral(v) || isCallable(v) || isIdentifier(v) }
 
-export function assertInt        (v : any) : asserts v is AST.Int        { if (!isInt(v))        throw new Error("Not Int")        }
-export function assertFlt        (v : any) : asserts v is AST.Flt        { if (!isFlt(v))        throw new Error("Not Flt")        }
+export function assertNum        (v : any) : asserts v is AST.Num        { if (!isNum(v))        throw new Error("Not Num")        }
 export function assertStr        (v : any) : asserts v is AST.Str        { if (!isStr(v))        throw new Error("Not Str")        }
 export function assertTrue       (v : any) : asserts v is AST.True       { if (!isTrue(v))       throw new Error("Not True")       }
 export function assertFalse      (v : any) : asserts v is AST.False      { if (!isFalse(v))      throw new Error("Not False")      }

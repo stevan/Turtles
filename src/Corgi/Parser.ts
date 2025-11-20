@@ -12,8 +12,7 @@ export function format (expr : AST.Expr) : string {
     switch (true) {
     case TypeUtil.isTrue(expr)    : return 'true';
     case TypeUtil.isFalse(expr)   : return 'false';
-    case TypeUtil.isInt(expr)     :
-    case TypeUtil.isFlt(expr)     : return expr.value.toString();
+    case TypeUtil.isNum(expr)     : return expr.value.toString();
     case TypeUtil.isStr(expr)     : return expr.value;
     case TypeUtil.isNil(expr)     : return '()';
     case TypeUtil.isCons(expr)    : return `(${ ListUtil.flatten(expr).map(format).join(' ') })`;
@@ -51,8 +50,7 @@ function lexer ( token : string ) : AST.Expr {
     switch (true) {
     case token == 'true'  : return ASTUtil.True();
     case token == 'false' : return ASTUtil.False();
-    case !isNaN(Number(token)) && Math.trunc(Number(token)) == Number(token) : return ASTUtil.Int(Number(token));
-    case !isNaN(Number(token)) && Math.trunc(Number(token)) != Number(token) : return ASTUtil.Flt(Number(token));
+    case !isNaN(Number(token)) : return ASTUtil.Num(Number(token));
     case  isNaN(Number(token)) : return ASTUtil.Word(token);
     default:
         throw new Error(`Huh?`)
