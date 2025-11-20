@@ -38,6 +38,28 @@ type Identifier = Word | Var | Special
 type Expr = Literal | List | Callable | Identifier
 
 // -----------------------------------------------------------------------------
+// Constructors
+// -----------------------------------------------------------------------------
+
+function True  () : True  { return { type : '*T*', value : true  } }
+function False () : False { return { type : '*F*', value : false } }
+
+function Int (value : number) : Int { return { type : 'INT', value } }
+function Flt (value : number) : Flt { return { type : 'FLT', value } }
+function Str (value : string) : Str { return { type : 'STR', value } }
+
+function Nil  ()                         : Nil  { return { type : 'NIL'} }
+function Cons (head : Expr, tail : List) : List { return { type : 'CONS', head, tail } }
+
+function Lambda (params : List, body : List)        : Lambda { return { type : 'LAMBDA', params, body } }
+function Native (params : List, body : NativeFunc)  : Native { return { type : 'NATIVE', params, body } }
+function FExpr  (params : List, body : NativeFExpr) : FExpr  { return { type : 'FEXPR',  params, body } }
+
+function Word    (ident : Ident) : Word    { return { type : 'WORD',    ident } }
+function Var     (ident : Ident) : Var     { return { type : 'VAR',     ident } }
+function Special (ident : Ident) : Special { return { type : 'SPECIAL', ident } }
+
+// -----------------------------------------------------------------------------
 // Type Checkers & Assertions
 // -----------------------------------------------------------------------------
 
@@ -84,28 +106,6 @@ namespace TypeUtil {
 }
 
 // -----------------------------------------------------------------------------
-// Constructors
-// -----------------------------------------------------------------------------
-
-function True  () : True  { return { type : '*T*', value : true  } }
-function False () : False { return { type : '*F*', value : false } }
-
-function Int (value : number) : Int { return { type : 'INT', value } }
-function Flt (value : number) : Flt { return { type : 'FLT', value } }
-function Str (value : string) : Str { return { type : 'STR', value } }
-
-function Nil  ()                         : Nil  { return { type : 'NIL'} }
-function Cons (head : Expr, tail : List) : List { return { type : 'CONS', head, tail } }
-
-function Lambda (params : List, body : List)        : Lambda { return { type : 'LAMBDA', params, body } }
-function Native (params : List, body : NativeFunc)  : Native { return { type : 'NATIVE', params, body } }
-function FExpr  (params : List, body : NativeFExpr) : FExpr  { return { type : 'FEXPR',  params, body } }
-
-function Word    (ident : Ident) : Word    { return { type : 'WORD',    ident } }
-function Var     (ident : Ident) : Var     { return { type : 'VAR',     ident } }
-function Special (ident : Ident) : Special { return { type : 'SPECIAL', ident } }
-
-// -----------------------------------------------------------------------------
 // List helpers
 // -----------------------------------------------------------------------------
 
@@ -141,8 +141,6 @@ namespace ListUtil {
         return [ head(l), ...flatten( tail(l) ) ]
     }
 }
-
-
 
 // -----------------------------------------------------------------------------
 // Parser & Deparser
@@ -276,118 +274,117 @@ const DUMP = (label : string, expr : Expr, env : Environment) => {
     console.log('-'.repeat(80));
 }
 
+namespace Runtime {
 
-function run (expr : Expr, env : Environment) : Expr {
-    return evaluate( expr, env );
-}
-
-function evaluate (expr : Expr, env : Environment, depth : number = 0) : Expr {
-    if (DEBUG) DUMP( 'TICK', expr, env );
-    switch (true) {
-    case TypeUtil.isCons(expr):
-        if (DEBUG) LOG(depth, 'Got CONS');
-        let top = evaluate(ListUtil.head(expr), env, depth + 1);
-        if (DEBUG) LOG(depth, 'EVAL(h)', top);
+    export function evaluate (expr : Expr, env : Environment, depth : number = 0) : Expr {
+        if (DEBUG) DUMP( 'TICK', expr, env );
         switch (true) {
-        case TypeUtil.isFExpr(top):
-            if (DEBUG) LOG(depth, '++ APPLY *FEXPR*', top);
-            return top.body( ListUtil.flatten( ListUtil.tail(expr) ), env );
-        case TypeUtil.isNative(top):
-            if (DEBUG) LOG(depth, '++ APPLY *NATIVE*', top);
-            return top.body( ListUtil.flatten( evaluate(ListUtil.tail(expr), env, depth + 1) as List ) );
-        case TypeUtil.isLambda(top):
-            if (DEBUG) LOG(depth, '++ APPLY *LAMBDA*', top);
-            let params = ListUtil.flatten(top.params);
-            let args   = ListUtil.flatten(evaluate(ListUtil.tail(expr), env, depth + 1) as List);
-            let localE = env.derive();
-            for (let i = 0; i < params.length; i++) {
-                let param = params[i];
-                let arg   = args[i];
-                TypeUtil.assertIdentifier(param);
-                TypeUtil.assertExpr(arg);
-                localE.assign(param, arg);
+        case TypeUtil.isCons(expr):
+            if (DEBUG) LOG(depth, 'Got CONS');
+            let top = evaluate(ListUtil.head(expr), env, depth + 1);
+            if (DEBUG) LOG(depth, 'EVAL(h)', top);
+            switch (true) {
+            case TypeUtil.isFExpr(top):
+                if (DEBUG) LOG(depth, '++ APPLY *FEXPR*', top);
+                return top.body( ListUtil.flatten( ListUtil.tail(expr) ), env );
+            case TypeUtil.isNative(top):
+                if (DEBUG) LOG(depth, '++ APPLY *NATIVE*', top);
+                return top.body( ListUtil.flatten( evaluate(ListUtil.tail(expr), env, depth + 1) as List ) );
+            case TypeUtil.isLambda(top):
+                if (DEBUG) LOG(depth, '++ APPLY *LAMBDA*', top);
+                let params = ListUtil.flatten(top.params);
+                let args   = ListUtil.flatten(evaluate(ListUtil.tail(expr), env, depth + 1) as List);
+                let localE = env.derive();
+                for (let i = 0; i < params.length; i++) {
+                    let param = params[i];
+                    let arg   = args[i];
+                    TypeUtil.assertIdentifier(param);
+                    TypeUtil.assertExpr(arg);
+                    localE.assign(param, arg);
+                }
+                return evaluate( top.body, localE );
+            default:
+                if (DEBUG) LOG(depth, '*LIST*');
+                return Cons( top, evaluate(ListUtil.tail(expr), env, depth + 1) as List );
             }
-            return evaluate( top.body, localE );
+        case TypeUtil.isIdentifier(expr):
+            if (DEBUG) LOG(depth, 'Got Idenfifier = Var | Word | Special', expr);
+            return env.lookup(expr);
+        case TypeUtil.isLiteral(expr):
+            if (DEBUG) LOG(depth, 'Got Literal', expr);
+            return expr;
+        case TypeUtil.isNil(expr):
+            if (DEBUG) LOG(depth, '()', expr);
+            return expr;
         default:
-            if (DEBUG) LOG(depth, '*LIST*');
-            return Cons( top, evaluate(ListUtil.tail(expr), env, depth + 1) as List );
+            throw new Error('WTF!');
         }
-    case TypeUtil.isIdentifier(expr):
-        if (DEBUG) LOG(depth, 'Got Idenfifier = Var | Word | Special', expr);
-        return env.lookup(expr);
-    case TypeUtil.isLiteral(expr):
-        if (DEBUG) LOG(depth, 'Got Literal', expr);
-        return expr;
-    case TypeUtil.isNil(expr):
-        if (DEBUG) LOG(depth, '()', expr);
-        return expr;
-    default:
-        throw new Error('WTF!');
+    }
+
+    export function createRootEnvironment () : Environment {
+        let env = new Environment();
+
+        env.assign( Special('lambda'), FExpr(
+            ListUtil.create( Var('params'), Var('body') ),
+            (args : Expr[], env : Environment) : Expr => {
+                let [ params, body ] = args;
+                TypeUtil.assertList(params);
+                TypeUtil.assertList(body);
+                return Lambda( params, body );
+            }
+        ));
+
+        env.assign( Special('if'), FExpr(
+            ListUtil.create( Var('cond'), Var('then'), Var('else') ),
+            (args : Expr[], env : Environment) : Expr => {
+                let [ cond, thenBranch, elseBranch ] = args;
+                TypeUtil.assertCons(cond);
+                TypeUtil.assertCons(thenBranch);
+                TypeUtil.assertCons(elseBranch);
+                let result = evaluate( cond, env );
+                return evaluate( TypeUtil.isFalse(result) ? elseBranch : thenBranch, env );
+            }
+        ));
+
+        env.assign( Word('=='), Native(
+            ListUtil.create( Var('n'), Var('m') ),
+            (args : Expr[]) : Expr => {
+                let [ lhs, rhs ] = args;
+                TypeUtil.assertLiteral(lhs);
+                TypeUtil.assertLiteral(rhs);
+                return (lhs.value == rhs.value) ? True() : False();
+            }
+        ));
+
+        env.assign( Word('+'), Native(
+            ListUtil.create( Var('n'), Var('m') ),
+            (args : Expr[]) : Expr => {
+                let [ lhs, rhs ] = args;
+                TypeUtil.assertInt(lhs);
+                TypeUtil.assertInt(rhs);
+                return Int(lhs.value + rhs.value);
+            }
+        ));
+
+        env.assign( Word('*'), Native(
+            ListUtil.create( Var('n'), Var('m') ),
+            (args : Expr[]) : Expr => {
+                let [ lhs, rhs ] = args;
+                TypeUtil.assertInt(lhs);
+                TypeUtil.assertInt(rhs);
+                return Int(lhs.value * rhs.value);
+            }
+        ));
+
+        return env;
     }
 }
-
-// -----------------------------------------------------------------------------
-// Built-in Environment
-// -----------------------------------------------------------------------------
-
-let env = new Environment();
-
-env.assign( Special('lambda'), FExpr(
-    ListUtil.create( Var('params'), Var('body') ),
-    (args : Expr[], env : Environment) : Expr => {
-        let [ params, body ] = args;
-        TypeUtil.assertList(params);
-        TypeUtil.assertList(body);
-        return Lambda( params, body );
-    }
-));
-
-env.assign( Special('if'), FExpr(
-    ListUtil.create( Var('cond'), Var('then'), Var('else') ),
-    (args : Expr[], env : Environment) : Expr => {
-        let [ cond, thenBranch, elseBranch ] = args;
-        TypeUtil.assertCons(cond);
-        TypeUtil.assertCons(thenBranch);
-        TypeUtil.assertCons(elseBranch);
-        let result = evaluate( cond, env );
-        return evaluate( TypeUtil.isFalse(result) ? elseBranch : thenBranch, env );
-    }
-));
-
-env.assign( Word('=='), Native(
-    ListUtil.create( Var('n'), Var('m') ),
-    (args : Expr[]) : Expr => {
-        let [ lhs, rhs ] = args;
-        TypeUtil.assertLiteral(lhs);
-        TypeUtil.assertLiteral(rhs);
-        return (lhs.value == rhs.value) ? True() : False();
-    }
-));
-
-env.assign( Word('+'), Native(
-    ListUtil.create( Var('n'), Var('m') ),
-    (args : Expr[]) : Expr => {
-        let [ lhs, rhs ] = args;
-        TypeUtil.assertInt(lhs);
-        TypeUtil.assertInt(rhs);
-        return Int(lhs.value + rhs.value);
-    }
-));
-
-env.assign( Word('*'), Native(
-    ListUtil.create( Var('n'), Var('m') ),
-    (args : Expr[]) : Expr => {
-        let [ lhs, rhs ] = args;
-        TypeUtil.assertInt(lhs);
-        TypeUtil.assertInt(rhs);
-        return Int(lhs.value * rhs.value);
-    }
-));
 
 // -----------------------------------------------------------------------------
 // Demo Program
 // -----------------------------------------------------------------------------
 
+let env     = Runtime.createRootEnvironment();
 let program = Parser.parse(`
     ((lambda (x y)
         (if (== x 10)
@@ -397,7 +394,7 @@ let program = Parser.parse(`
 
 console.log(Parser.format(program));
 
-DUMP( 'RESULT', run( program, env ), env );
+DUMP( 'RESULT', Runtime.evaluate( program, env ), env );
 
 // -----------------------------------------------------------------------------
 
