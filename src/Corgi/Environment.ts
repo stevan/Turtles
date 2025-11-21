@@ -1,7 +1,7 @@
 
 import * as AST from './AST'
 
-type MaybeEnvironment = Environment | undefined;
+export type MaybeEnvironment = Environment | undefined;
 
 export class Environment {
     public parent   : MaybeEnvironment;

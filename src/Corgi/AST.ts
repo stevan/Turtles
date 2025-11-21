@@ -20,9 +20,9 @@ export type List = Cons | Nil
 export type NativeFunc  = ( env: Environment ) => Expr
 export type NativeFExpr = ( args : Expr[], env: Environment ) => Expr
 
-export type Lambda  = { type : 'LAMBDA',  params : List, body : List }
-export type Native  = { type : 'NATIVE',  params : List, body : NativeFunc  }
-export type FExpr   = { type : 'FEXPR',   params : List, body : NativeFExpr }
+export type Lambda  = { type : 'LAMBDA', params : List, body : List }
+export type Native  = { type : 'NATIVE', params : List, body : NativeFunc  }
+export type FExpr   = { type : 'FEXPR',  params : List, body : NativeFExpr }
 
 export type Callable = Lambda | Native | FExpr
 

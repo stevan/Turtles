@@ -16,4 +16,4 @@ let program = Parser.parse(`(
 
 console.log(Parser.format(program));
 
-Runtime.DUMP( 'RESULT', machine.evaluate( program, env ), env );
+Runtime.DUMP( 'RESULT', machine.run( program ), env );

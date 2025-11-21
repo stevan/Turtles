@@ -5,27 +5,96 @@ import * as TypeUtil from './TypeUtil'
 import * as ListUtil from './ListUtil'
 import * as Parser   from './Parser'
 
-import { Environment } from './Environment'
+import { Environment, MaybeEnvironment } from './Environment'
+
 
 // -----------------------------------------------------------------------------
-// Runtime
+// Values
 // -----------------------------------------------------------------------------
 
-type Kontinuation =
-    | { op : 'HALT', expr : AST.Expr }
+type Closure = {
+    type : 'CLOSURE',
+    env  : Environment,
+    proc : AST.Callable
+}
 
-    | { op : 'JUST', expr : AST.Expr }
-    | { op : 'LKUP', expr : AST.Identifier }
+type Result = { type : 'RESULT', env : Environment, value : AST.Expr }
 
-    | { op : 'CALL', call : AST.Callable, args : AST.List }
+type Value = Closure | Result
 
-    | { op : 'EVAL_HEAD', expr : AST.Cons }
-    | { op : 'EVAL_TAIL', expr : AST.Cons }
+function isClosure (v : any) : v is Closure { return v.type == 'CLOSURE' }
+function isResult  (v : any) : v is Result  { return v.type == 'RESULT' }
+function isValue   (v : any) : v is Value   { return isClosure(v) || isResult(v) }
+
+function assertValue   (v : any) : asserts v is Value   { if (!isValue(v))   throw new Error("Not Value")   }
+function assertResult  (v : any) : asserts v is Result  { if (!isResult(v))  throw new Error("Not Result")  }
+function assertClosure (v : any) : asserts v is Closure { if (!isClosure(v)) throw new Error("Not Closure") }
+
+function Closure (env : Environment, proc : AST.Callable) : Closure {
+    return { type : 'CLOSURE', env, proc }
+}
+
+function Result (env : Environment, value : AST.Expr) : Result {
+    return { type : 'RESULT', env, value }
+}
+
+// -----------------------------------------------------------------------------
+// Ops
+// -----------------------------------------------------------------------------
+
+type Halt = { op : 'HALT' }
+type Just = { op : 'JUST', expr : AST.Expr }
+type Lkup = { op : 'LKUP', expr : AST.Identifier }
+type Bind = { op : 'BIND', expr : AST.Identifier, value : AST.Expr }
+type Call = { op : 'CALL', closure : Closure, args : AST.List };
+type Eval = { op : 'EVAL', expr : AST.List };
+
+type Frame = Halt | Just | Lkup | Bind | Call | Eval
+
+function isHalt (v : any) : v is Halt { return v.op == 'HALT' }
+function isJust (v : any) : v is Just { return v.op == 'JUST' }
+function isLkup (v : any) : v is Lkup { return v.op == 'LKUP' }
+function isBind (v : any) : v is Bind { return v.op == 'BIND' }
+function isCall (v : any) : v is Call { return v.op == 'CALL' }
+function isEval (v : any) : v is Eval { return v.op == 'EVAL' }
+
+function isFrame (v : any) : v is Frame {
+    return isHalt(v) || isJust(v) || isLkup(v) || isBind(v) || isCall(v) || isEval(v)
+}
+
+function assertHalt  (v : any) : asserts v is Halt  { if (!isHalt(v))  throw new Error("Not Halt!")  }
+function assertJust  (v : any) : asserts v is Just  { if (!isJust(v))  throw new Error("Not Just!")  }
+function assertLkup  (v : any) : asserts v is Lkup  { if (!isLkup(v))  throw new Error("Not Lkup!")  }
+function assertBind  (v : any) : asserts v is Bind  { if (!isBind(v))  throw new Error("Not Bind!")  }
+function assertCall  (v : any) : asserts v is Call  { if (!isCall(v))  throw new Error("Not Call!")  }
+function assertEval  (v : any) : asserts v is Eval  { if (!isEval(v))  throw new Error("Not Eval!")  }
+function assertFrame (v : any) : asserts v is Frame { if (!isFrame(v)) throw new Error("Not Frame!") }
+
+function Halt ()                                        : Halt { return { op : 'HALT' }                }
+function Just (expr : AST.Expr)                         : Just { return { op : 'JUST', expr }          }
+function Lkup (expr : AST.Identifier)                   : Lkup { return { op : 'LKUP', expr }          }
+function Bind (expr : AST.Identifier, value : AST.Expr) : Bind { return { op : 'BIND', expr, value }   }
+function Call (closure : Closure, args : AST.List)      : Call { return { op : 'CALL', closure, args } }
+function Eval (expr : AST.List)                         : Eval { return { op : 'EVAL', expr }          }
+
+// -----------------------------------------------------------------------------
+// Continuations
+// -----------------------------------------------------------------------------
+
+type Kontinuation = Frame
+
+// Welcome to the Machine
 
 export class Machine {
 
-    step (expr : AST.Expr, env : Environment, kont : Kontinuation) : boolean {
-        return false;
+    run (expr : AST.Expr, env? : MaybeEnvironment) : AST.Expr {
+        // TODO - handle errors
+        let result = this.evaluate(
+            expr,
+            env ?? this.createRootEnvironment()
+        );
+
+        return result;
     }
 
     // Expression evaluator
@@ -34,17 +103,17 @@ export class Machine {
         switch (true) {
         case TypeUtil.isCons(expr):
             if (DEBUG) LOG('Got CONS');
-            return this.kontinue({ op : 'EVAL_HEAD', expr }, env);
+            return this.kontinue(Eval(expr), env);
         case TypeUtil.isIdentifier(expr):
             if (DEBUG) LOG('Got Idenfifier = Var | Word | Special', expr);
-            return this.kontinue({ op : 'LKUP', expr }, env)
+            return this.kontinue(Lkup(expr), env)
         case TypeUtil.isLiteral(expr):
             if (DEBUG) LOG('Got Literal', expr);
-            return this.kontinue({ op : 'JUST', expr }, env);
+            return this.kontinue(Just(expr), env);
         case TypeUtil.isNil(expr):
             if (DEBUG) LOG('()', expr);
             // XXX - not sure if this is correct ...
-            return this.kontinue({ op : 'JUST', expr }, env);
+            return this.kontinue(Just(expr), env);
         default:
             throw new Error('WTF!');
         }
@@ -55,22 +124,17 @@ export class Machine {
         switch (k.op) {
         case 'JUST': return k.expr;
         case 'LKUP': return env.lookup(k.expr);
-
-        case 'CALL': return this.apply( k.call, k.args, env );
-
-        case 'EVAL_HEAD':
+        case 'EVAL':
             let top = this.evaluate( ListUtil.head(k.expr), env );
             switch (true) {
             case TypeUtil.isCallable(top):
                 if (DEBUG) LOG('*CALL*', top);
-                // collect args ... THEN call
-                return this.kontinue({ op : 'CALL', call : top, args : ListUtil.tail(k.expr) }, env)
+                return this.apply( top, ListUtil.tail(k.expr), env )
             default:
                 if (DEBUG) LOG('*LIST*');
-                // collect rest of list ...
                 return ASTUtil.Cons( top, this.evaluate( ListUtil.tail(k.expr), env ) as AST.List );
             }
-        case 'EVAL_TAIL':
+        case 'CALL':
             throw new Error('TODO');
         default:
             throw new Error(`Unknown Kontinuation type`);
@@ -113,6 +177,7 @@ export class Machine {
 
     // root environment
     createRootEnvironment () : Environment {
+
         let env = new Environment();
 
         env.assign( ASTUtil.Special('lambda'), ASTUtil.FExpr(
