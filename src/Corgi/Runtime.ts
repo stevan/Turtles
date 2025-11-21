@@ -19,6 +19,8 @@ export const DUMP = (label : string, expr : AST.Expr, env : Environment) => {
     console.log('-'.repeat(80));
 }
 
+
+
 export function evaluate (expr : AST.Expr, env : Environment) : AST.Expr {
     if (DEBUG) DUMP( 'TICK', expr, env );
     switch (true) {
@@ -28,7 +30,7 @@ export function evaluate (expr : AST.Expr, env : Environment) : AST.Expr {
         switch (true) {
         case TypeUtil.isCallable(top):
             if (DEBUG) LOG('*CALL*', top);
-            return evaluateCall( top, ListUtil.tail(expr), env );
+            return apply( top, ListUtil.tail(expr), env );
         default:
             if (DEBUG) LOG('*LIST*');
             return ASTUtil.Cons( top, evaluate(ListUtil.tail(expr), env) as AST.List );
@@ -47,7 +49,7 @@ export function evaluate (expr : AST.Expr, env : Environment) : AST.Expr {
     }
 }
 
-function evaluateCall (top : AST.Callable, rest : AST.List, env : Environment) : AST.Expr {
+function apply (top : AST.Callable, rest : AST.List, env : Environment) : AST.Expr {
     switch (true) {
     case TypeUtil.isFExpr(top):
         if (DEBUG) LOG('++ APPLY *FEXPR*', top);
