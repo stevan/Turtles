@@ -7,6 +7,10 @@ import * as Parser   from './Parser'
 
 import { Environment } from './Environment'
 
+// -----------------------------------------------------------------------------
+// Debugging
+// -----------------------------------------------------------------------------
+
 const DEBUG = true;
 const LOG   = (msg : string, e : any = undefined) =>
     console.log(`LOG - ${msg} - `, e ? `${Parser.format(e)}` : '...' );
@@ -19,12 +23,17 @@ export const DUMP = (label : string, expr : AST.Expr, env : Environment) => {
     console.log('-'.repeat(80));
 }
 
+// -----------------------------------------------------------------------------
+// Runtime
+// -----------------------------------------------------------------------------
 
 type Kontinuation =
     | { op : 'JUST', expr : AST.Expr }
     | { op : 'LKUP', expr : AST.Identifier }
     | { op : 'EVAL', expr : AST.Cons }
+    | { op : 'CALL', call : AST.Callable, args : AST.List }
 
+// Expression evaluator
 export function evaluate (expr : AST.Expr, env : Environment) : AST.Expr {
     if (DEBUG) DUMP( 'TICK', expr, env );
     switch (true) {
@@ -39,23 +48,24 @@ export function evaluate (expr : AST.Expr, env : Environment) : AST.Expr {
         return kontinue({ op : 'JUST', expr }, env);
     case TypeUtil.isNil(expr):
         if (DEBUG) LOG('()', expr);
-        // XXX - not sure if this is correct ...
-        return kontinue({ op : 'JUST', expr }, env);
+        return expr; // XXX - not sure if this is correct ...
     default:
         throw new Error('WTF!');
     }
 }
 
+// what to do next ...
 function kontinue (k : Kontinuation, env : Environment) : AST.Expr {
     switch (k.op) {
     case 'JUST': return k.expr;
     case 'LKUP': return env.lookup(k.expr);
+    case 'CALL': return apply( k.call, k.args, env );
     case 'EVAL':
         let top = evaluate( ListUtil.head(k.expr), env );
         switch (true) {
         case TypeUtil.isCallable(top):
             if (DEBUG) LOG('*CALL*', top);
-            return apply( top, ListUtil.tail(k.expr), env );
+            return kontinue({ op : 'CALL', call : top, args : ListUtil.tail(k.expr) }, env)
         default:
             if (DEBUG) LOG('*LIST*');
             return ASTUtil.Cons( top, evaluate( ListUtil.tail(k.expr), env ) as AST.List );
@@ -65,6 +75,7 @@ function kontinue (k : Kontinuation, env : Environment) : AST.Expr {
     }
 }
 
+// apply a function, builtin or fexpr
 function apply (top : AST.Callable, rest : AST.List, env : Environment) : AST.Expr {
     switch (true) {
     case TypeUtil.isFExpr(top):
@@ -90,6 +101,10 @@ function apply (top : AST.Callable, rest : AST.List, env : Environment) : AST.Ex
         throw new Error(`Unknown Callable Type`);
     }
 }
+
+// -----------------------------------------------------------------------------
+// Builtins
+// -----------------------------------------------------------------------------
 
 type Predicate = (lhs : string | number | boolean, rhs : string | number | boolean) => boolean
 type NumBinOp  = (lhs : number, rhs : number) => number
