@@ -10,50 +10,6 @@ import { Environment, MaybeEnvironment } from './Environment'
 
 export class Machine {
 
-/*
-    public root    : Environment;
-    public program : Program;
-
-
-    step (state : State) : State {
-        if (state.k.length == 0) return state;
-        switch (state.type) {
-        case 'EVAL': return this.evaluate( state );
-        case 'CONT': return this.kontinue( state );
-        default: throw new Error("Unknown State type")
-        }
-    }
-
-    evaluate (state : Evaluate) : Continue {
-        // gets an expression to evaluated
-        // focuses on building, calling,
-        // and finding things.
-        //
-        // focuses on:
-        // - looking up variables
-        // - building lambdas
-        // - initiating function calls
-        //
-        // mostly just c & e
-        // mostly create and read
-    }
-
-    kontinue (state : Continue) : Evaluate {
-        // gets a value to be returned and
-        // performs any cleanup necessary
-        // and delivers the value to
-        // a waiting continuation.
-        //
-        // focuses on
-        // - return values to waiting callers
-        // - stack frames? scope cleanups?
-        // - terminal if k is empty
-        //
-        // mostly just k & e
-        // mostly create and write/update
-    }
-*/
-
     // Expression evaluator
     evaluate (expr : AST.Expr, env : AST.Env) : AST.Value {
         if (DEBUG) DUMP( 'TICK', expr, env );
