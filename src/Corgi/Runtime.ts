@@ -8,33 +8,21 @@ import * as Parser   from './Parser'
 import { Environment } from './Environment'
 
 // -----------------------------------------------------------------------------
-// Debugging
-// -----------------------------------------------------------------------------
-
-const DEBUG = true;
-const LOG   = (msg : string, e : any = undefined) =>
-    console.log(`LOG - ${msg} - `, e ? `${Parser.format(e)}` : '...' );
-
-export const DUMP = (label : string, expr : AST.Expr, env : Environment) => {
-    console.group(`-- ${label} `, '-'.repeat(80 - (label.length + 5)));
-    console.log('%.ENV  : ', env.DUMP());
-    console.log('@.EXPR : ', Parser.format(expr));
-    console.groupEnd();
-    console.log('-'.repeat(80));
-}
-
-// -----------------------------------------------------------------------------
 // Runtime
 // -----------------------------------------------------------------------------
 
 type Kontinuation =
     | { op : 'HALT', expr : AST.Expr }
+
     | { op : 'JUST', expr : AST.Expr }
     | { op : 'LKUP', expr : AST.Identifier }
-    | { op : 'EVAL', expr : AST.Cons }
+
     | { op : 'CALL', call : AST.Callable, args : AST.List }
 
-class Machine {
+    | { op : 'EVAL_HEAD', expr : AST.Cons }
+    | { op : 'EVAL_TAIL', expr : AST.Cons }
+
+export class Machine {
 
     // Expression evaluator
     evaluate (expr : AST.Expr, env : Environment) : AST.Expr {
@@ -42,7 +30,7 @@ class Machine {
         switch (true) {
         case TypeUtil.isCons(expr):
             if (DEBUG) LOG('Got CONS');
-            return this.kontinue({ op : 'EVAL', expr }, env);
+            return this.kontinue({ op : 'EVAL_HEAD', expr }, env);
         case TypeUtil.isIdentifier(expr):
             if (DEBUG) LOG('Got Idenfifier = Var | Word | Special', expr);
             return this.kontinue({ op : 'LKUP', expr }, env)
@@ -63,8 +51,10 @@ class Machine {
         switch (k.op) {
         case 'JUST': return k.expr;
         case 'LKUP': return env.lookup(k.expr);
+
         case 'CALL': return this.apply( k.call, k.args, env );
-        case 'EVAL':
+
+        case 'EVAL_HEAD':
             let top = this.evaluate( ListUtil.head(k.expr), env );
             switch (true) {
             case TypeUtil.isCallable(top):
@@ -76,6 +66,8 @@ class Machine {
                 // collect rest of list ...
                 return ASTUtil.Cons( top, this.evaluate( ListUtil.tail(k.expr), env ) as AST.List );
             }
+        case 'EVAL_TAIL':
+            throw new Error('TODO');
         default:
             throw new Error(`Unknown Kontinuation type`);
         }
@@ -108,10 +100,80 @@ class Machine {
         }
     }
 
+    // root environment
+    createRootEnvironment () : Environment {
+        let env = new Environment();
+
+        env.assign( ASTUtil.Special('lambda'), ASTUtil.FExpr(
+            ListUtil.create( ASTUtil.Var('params'), ASTUtil.Var('body') ),
+            (args : AST.Expr[], env : Environment) : AST.Expr => {
+                let [ params, body ] = args;
+                TypeUtil.assertList(params);
+                TypeUtil.assertList(body);
+                return ASTUtil.Lambda( params, body );
+            }
+        ));
+
+        env.assign( ASTUtil.Special('set!'), ASTUtil.FExpr(
+            ListUtil.create( ASTUtil.Var('name'), ASTUtil.Var('value') ),
+            (args : AST.Expr[], env : Environment) : AST.Expr => {
+                let [ name, value ] = args;
+                TypeUtil.assertIdentifier(name);
+                TypeUtil.assertExpr(value);
+                env.assign( name, this.evaluate( value, env ) );
+                return ASTUtil.Nil();
+            }
+        ));
+
+        env.assign( ASTUtil.Special('if'), ASTUtil.FExpr(
+            ListUtil.create( ASTUtil.Var('cond'), ASTUtil.Var('then'), ASTUtil.Var('else') ),
+            (args : AST.Expr[], env : Environment) : AST.Expr => {
+                let [ cond, thenBranch, elseBranch ] = args;
+                TypeUtil.assertCons(cond);
+                TypeUtil.assertCons(thenBranch);
+                TypeUtil.assertCons(elseBranch);
+                let result = this.evaluate( cond, env );
+                return this.evaluate( TypeUtil.isFalse(result) ? elseBranch : thenBranch, env );
+            }
+        ));
+
+        env.assign( ASTUtil.Word('=='), liftPredicate((n, m) => n == m));
+        env.assign( ASTUtil.Word('!='), liftPredicate((n, m) => n != m));
+
+        env.assign( ASTUtil.Word('>'),  liftPredicate((n, m) => n >  m));
+        env.assign( ASTUtil.Word('>='), liftPredicate((n, m) => n >= m));
+        env.assign( ASTUtil.Word('<='), liftPredicate((n, m) => n <= m));
+        env.assign( ASTUtil.Word('<'),  liftPredicate((n, m) => n <  m));
+
+        env.assign( ASTUtil.Word('+'),  liftNumBinOp((n, m) => n + m));
+        env.assign( ASTUtil.Word('-'),  liftNumBinOp((n, m) => n - m));
+        env.assign( ASTUtil.Word('*'),  liftNumBinOp((n, m) => n * m));
+        env.assign( ASTUtil.Word('/'),  liftNumBinOp((n, m) => n / m));
+        env.assign( ASTUtil.Word('%'),  liftNumBinOp((n, m) => n % m));
+
+        return env;
+    }
+
 }
 
 // -----------------------------------------------------------------------------
-// Builtins
+// Debugging
+// -----------------------------------------------------------------------------
+
+const DEBUG = true;
+const LOG   = (msg : string, e : any = undefined) =>
+    console.log(`LOG - ${msg} - `, e ? `${Parser.format(e)}` : '...' );
+
+export const DUMP = (label : string, expr : AST.Expr, env : Environment) => {
+    console.group(`-- ${label} `, '-'.repeat(80 - (label.length + 5)));
+    console.log('%.ENV  : ', env.DUMP());
+    console.log('@.EXPR : ', Parser.format(expr));
+    console.groupEnd();
+    console.log('-'.repeat(80));
+}
+
+// -----------------------------------------------------------------------------
+// Builtin Helpers
 // -----------------------------------------------------------------------------
 
 type Predicate = (lhs : string | number | boolean, rhs : string | number | boolean) => boolean
@@ -139,57 +201,4 @@ function liftNumBinOp (binop : NumBinOp) : AST.Native {
             return ASTUtil.Num( binop(lhs.value, rhs.value) );
         }
     )
-}
-
-export function createRootEnvironment () : Environment {
-    let env = new Environment();
-
-    env.assign( ASTUtil.Special('lambda'), ASTUtil.FExpr(
-        ListUtil.create( ASTUtil.Var('params'), ASTUtil.Var('body') ),
-        (args : AST.Expr[], env : Environment) : AST.Expr => {
-            let [ params, body ] = args;
-            TypeUtil.assertList(params);
-            TypeUtil.assertList(body);
-            return ASTUtil.Lambda( params, body );
-        }
-    ));
-
-    env.assign( ASTUtil.Special('set!'), ASTUtil.FExpr(
-        ListUtil.create( ASTUtil.Var('name'), ASTUtil.Var('value') ),
-        (args : AST.Expr[], env : Environment) : AST.Expr => {
-            let [ name, value ] = args;
-            TypeUtil.assertIdentifier(name);
-            TypeUtil.assertExpr(value);
-            env.assign( name, evaluate( value, env ) );
-            return ASTUtil.Nil();
-        }
-    ));
-
-    env.assign( ASTUtil.Special('if'), ASTUtil.FExpr(
-        ListUtil.create( ASTUtil.Var('cond'), ASTUtil.Var('then'), ASTUtil.Var('else') ),
-        (args : AST.Expr[], env : Environment) : AST.Expr => {
-            let [ cond, thenBranch, elseBranch ] = args;
-            TypeUtil.assertCons(cond);
-            TypeUtil.assertCons(thenBranch);
-            TypeUtil.assertCons(elseBranch);
-            let result = evaluate( cond, env );
-            return evaluate( TypeUtil.isFalse(result) ? elseBranch : thenBranch, env );
-        }
-    ));
-
-    env.assign( ASTUtil.Word('=='), liftPredicate((n, m) => n == m));
-    env.assign( ASTUtil.Word('!='), liftPredicate((n, m) => n != m));
-
-    env.assign( ASTUtil.Word('>'),  liftPredicate((n, m) => n >  m));
-    env.assign( ASTUtil.Word('>='), liftPredicate((n, m) => n >= m));
-    env.assign( ASTUtil.Word('<='), liftPredicate((n, m) => n <= m));
-    env.assign( ASTUtil.Word('<'),  liftPredicate((n, m) => n <  m));
-
-    env.assign( ASTUtil.Word('+'),  liftNumBinOp((n, m) => n + m));
-    env.assign( ASTUtil.Word('-'),  liftNumBinOp((n, m) => n - m));
-    env.assign( ASTUtil.Word('*'),  liftNumBinOp((n, m) => n * m));
-    env.assign( ASTUtil.Word('/'),  liftNumBinOp((n, m) => n / m));
-    env.assign( ASTUtil.Word('%'),  liftNumBinOp((n, m) => n % m));
-
-    return env;
 }

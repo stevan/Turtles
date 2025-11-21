@@ -2,7 +2,9 @@
 
 import { Runtime, Parser } from '../src/Corgi'
 
-let env     = Runtime.createRootEnvironment();
+let machine = new Runtime.Machine();
+let env     = machine.createRootEnvironment();
+
 let program = Parser.parse(`(
     (set! addit
         (lambda (x y)
@@ -14,4 +16,4 @@ let program = Parser.parse(`(
 
 console.log(Parser.format(program));
 
-Runtime.DUMP( 'RESULT', new Runtime.Machine().evaluate( program, env ), env );
+Runtime.DUMP( 'RESULT', machine.evaluate( program, env ), env );
