@@ -20,32 +20,48 @@ export const DUMP = (label : string, expr : AST.Expr, env : Environment) => {
 }
 
 
+type Kontinuation =
+    | { op : 'JUST', expr : AST.Expr }
+    | { op : 'LKUP', expr : AST.Identifier }
+    | { op : 'EVAL', expr : AST.Cons }
 
 export function evaluate (expr : AST.Expr, env : Environment) : AST.Expr {
     if (DEBUG) DUMP( 'TICK', expr, env );
     switch (true) {
     case TypeUtil.isCons(expr):
         if (DEBUG) LOG('Got CONS');
-        let top = evaluate(ListUtil.head(expr), env);
+        return kontinue({ op : 'EVAL', expr }, env);
+    case TypeUtil.isIdentifier(expr):
+        if (DEBUG) LOG('Got Idenfifier = Var | Word | Special', expr);
+        return kontinue({ op : 'LKUP', expr }, env)
+    case TypeUtil.isLiteral(expr):
+        if (DEBUG) LOG('Got Literal', expr);
+        return kontinue({ op : 'JUST', expr }, env);
+    case TypeUtil.isNil(expr):
+        if (DEBUG) LOG('()', expr);
+        // XXX - not sure if this is correct ...
+        return kontinue({ op : 'JUST', expr }, env);
+    default:
+        throw new Error('WTF!');
+    }
+}
+
+function kontinue (k : Kontinuation, env : Environment) : AST.Expr {
+    switch (k.op) {
+    case 'JUST': return k.expr;
+    case 'LKUP': return env.lookup(k.expr);
+    case 'EVAL':
+        let top = evaluate( ListUtil.head(k.expr), env );
         switch (true) {
         case TypeUtil.isCallable(top):
             if (DEBUG) LOG('*CALL*', top);
-            return apply( top, ListUtil.tail(expr), env );
+            return apply( top, ListUtil.tail(k.expr), env );
         default:
             if (DEBUG) LOG('*LIST*');
-            return ASTUtil.Cons( top, evaluate(ListUtil.tail(expr), env) as AST.List );
+            return ASTUtil.Cons( top, evaluate( ListUtil.tail(k.expr), env ) as AST.List );
         }
-    case TypeUtil.isIdentifier(expr):
-        if (DEBUG) LOG('Got Idenfifier = Var | Word | Special', expr);
-        return env.lookup(expr);
-    case TypeUtil.isLiteral(expr):
-        if (DEBUG) LOG('Got Literal', expr);
-        return expr;
-    case TypeUtil.isNil(expr):
-        if (DEBUG) LOG('()', expr);
-        return expr;
     default:
-        throw new Error('WTF!');
+        throw new Error(`Unknown Kontinuation type`);
     }
 }
 
