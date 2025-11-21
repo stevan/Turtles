@@ -28,78 +28,86 @@ export const DUMP = (label : string, expr : AST.Expr, env : Environment) => {
 // -----------------------------------------------------------------------------
 
 type Kontinuation =
+    | { op : 'HALT', expr : AST.Expr }
     | { op : 'JUST', expr : AST.Expr }
     | { op : 'LKUP', expr : AST.Identifier }
     | { op : 'EVAL', expr : AST.Cons }
     | { op : 'CALL', call : AST.Callable, args : AST.List }
 
-// Expression evaluator
-export function evaluate (expr : AST.Expr, env : Environment) : AST.Expr {
-    if (DEBUG) DUMP( 'TICK', expr, env );
-    switch (true) {
-    case TypeUtil.isCons(expr):
-        if (DEBUG) LOG('Got CONS');
-        return kontinue({ op : 'EVAL', expr }, env);
-    case TypeUtil.isIdentifier(expr):
-        if (DEBUG) LOG('Got Idenfifier = Var | Word | Special', expr);
-        return kontinue({ op : 'LKUP', expr }, env)
-    case TypeUtil.isLiteral(expr):
-        if (DEBUG) LOG('Got Literal', expr);
-        return kontinue({ op : 'JUST', expr }, env);
-    case TypeUtil.isNil(expr):
-        if (DEBUG) LOG('()', expr);
-        return expr; // XXX - not sure if this is correct ...
-    default:
-        throw new Error('WTF!');
-    }
-}
+class Machine {
 
-// what to do next ...
-function kontinue (k : Kontinuation, env : Environment) : AST.Expr {
-    switch (k.op) {
-    case 'JUST': return k.expr;
-    case 'LKUP': return env.lookup(k.expr);
-    case 'CALL': return apply( k.call, k.args, env );
-    case 'EVAL':
-        let top = evaluate( ListUtil.head(k.expr), env );
+    // Expression evaluator
+    evaluate (expr : AST.Expr, env : Environment) : AST.Expr {
+        if (DEBUG) DUMP( 'TICK', expr, env );
         switch (true) {
-        case TypeUtil.isCallable(top):
-            if (DEBUG) LOG('*CALL*', top);
-            return kontinue({ op : 'CALL', call : top, args : ListUtil.tail(k.expr) }, env)
+        case TypeUtil.isCons(expr):
+            if (DEBUG) LOG('Got CONS');
+            return this.kontinue({ op : 'EVAL', expr }, env);
+        case TypeUtil.isIdentifier(expr):
+            if (DEBUG) LOG('Got Idenfifier = Var | Word | Special', expr);
+            return this.kontinue({ op : 'LKUP', expr }, env)
+        case TypeUtil.isLiteral(expr):
+            if (DEBUG) LOG('Got Literal', expr);
+            return this.kontinue({ op : 'JUST', expr }, env);
+        case TypeUtil.isNil(expr):
+            if (DEBUG) LOG('()', expr);
+            // XXX - not sure if this is correct ...
+            return this.kontinue({ op : 'JUST', expr }, env);
         default:
-            if (DEBUG) LOG('*LIST*');
-            return ASTUtil.Cons( top, evaluate( ListUtil.tail(k.expr), env ) as AST.List );
+            throw new Error('WTF!');
         }
-    default:
-        throw new Error(`Unknown Kontinuation type`);
     }
-}
 
-// apply a function, builtin or fexpr
-function apply (top : AST.Callable, rest : AST.List, env : Environment) : AST.Expr {
-    switch (true) {
-    case TypeUtil.isFExpr(top):
-        if (DEBUG) LOG('++ APPLY *FEXPR*', top);
-        return top.body( ListUtil.flatten( rest ), env );
-    case TypeUtil.isNative(top):
-        if (DEBUG) LOG('++ APPLY *NATIVE*', top);
-        return top.body( ListUtil.flatten( evaluate( rest, env ) as AST.List ) );
-    case TypeUtil.isLambda(top):
-        if (DEBUG) LOG('++ APPLY *LAMBDA*', top);
-        let params = ListUtil.flatten(top.params);
-        let args   = ListUtil.flatten(evaluate( rest, env ) as AST.List);
-        let localE = env.derive();
-        for (let i = 0; i < params.length; i++) {
-            let param = params[i];
-            let arg   = args[i];
-            TypeUtil.assertIdentifier(param);
-            TypeUtil.assertExpr(arg);
-            localE.assign(param, arg);
+    // what to do next ...
+    kontinue (k : Kontinuation, env : Environment) : AST.Expr {
+        switch (k.op) {
+        case 'JUST': return k.expr;
+        case 'LKUP': return env.lookup(k.expr);
+        case 'CALL': return this.apply( k.call, k.args, env );
+        case 'EVAL':
+            let top = this.evaluate( ListUtil.head(k.expr), env );
+            switch (true) {
+            case TypeUtil.isCallable(top):
+                if (DEBUG) LOG('*CALL*', top);
+                // collect args ... THEN call
+                return this.kontinue({ op : 'CALL', call : top, args : ListUtil.tail(k.expr) }, env)
+            default:
+                if (DEBUG) LOG('*LIST*');
+                // collect rest of list ...
+                return ASTUtil.Cons( top, this.evaluate( ListUtil.tail(k.expr), env ) as AST.List );
+            }
+        default:
+            throw new Error(`Unknown Kontinuation type`);
         }
-        return evaluate( top.body, localE );
-    default:
-        throw new Error(`Unknown Callable Type`);
     }
+
+    // apply a function, builtin or fexpr
+    apply (top : AST.Callable, rest : AST.List, env : Environment) : AST.Expr {
+        switch (true) {
+        case TypeUtil.isFExpr(top):
+            if (DEBUG) LOG('++ APPLY *FEXPR*', top);
+            return top.body( ListUtil.flatten( rest ), env );
+        case TypeUtil.isNative(top):
+            if (DEBUG) LOG('++ APPLY *NATIVE*', top);
+            return top.body( ListUtil.flatten( this.evaluate( rest, env ) as AST.List ) );
+        case TypeUtil.isLambda(top):
+            if (DEBUG) LOG('++ APPLY *LAMBDA*', top);
+            let params = ListUtil.flatten(top.params);
+            let args   = ListUtil.flatten(this.evaluate( rest, env ) as AST.List);
+            let localE = env.derive();
+            for (let i = 0; i < params.length; i++) {
+                let param = params[i];
+                let arg   = args[i];
+                TypeUtil.assertIdentifier(param);
+                TypeUtil.assertExpr(arg);
+                localE.assign(param, arg);
+            }
+            return this.evaluate( top.body, localE );
+        default:
+            throw new Error(`Unknown Callable Type`);
+        }
+    }
+
 }
 
 // -----------------------------------------------------------------------------
