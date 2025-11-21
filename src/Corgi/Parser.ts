@@ -13,15 +13,16 @@ export function format (expr : AST.Expr) : string {
     case TypeUtil.isTrue(expr)    : return 'true';
     case TypeUtil.isFalse(expr)   : return 'false';
     case TypeUtil.isNum(expr)     : return expr.value.toString();
-    case TypeUtil.isStr(expr)     : return expr.value;
+    case TypeUtil.isStr(expr)     : return `"${expr.value}"`;
     case TypeUtil.isNil(expr)     : return '()';
     case TypeUtil.isCons(expr)    : return `(${ ListUtil.flatten(expr).map(format).join(' ') })`;
-    case TypeUtil.isWord(expr)    :
-    case TypeUtil.isVar(expr)     :
-    case TypeUtil.isSpecial(expr) : return expr.ident;
+    //case TypeUtil.isPair(expr)    : return `(${format(expr.first)} ${format(expr.second)})`;
     case TypeUtil.isLambda(expr)  : return `(lambda ${format(expr.params)} ${format(expr.body)})`;
     case TypeUtil.isNative(expr)  : return `(native ${format(expr.params)} #:native)`;
     case TypeUtil.isFExpr(expr)   : return  `(fexpr ${format(expr.params)} @:fexpr)`;
+    case TypeUtil.isWord(expr)    :
+    case TypeUtil.isVar(expr)     : return expr.ident;
+    case TypeUtil.isApply(expr)   : return `(& ${format(expr.call)} ${format(expr.args)})`;
     default:
         return 'XXX'
     }
