@@ -17,7 +17,7 @@ export type Cons = { type : 'CONS', head : Expr, tail : List }
 
 export type List = Cons | Nil
 
-export type NativeFunc  = ( args : Expr[] ) => Expr
+export type NativeFunc  = ( env: Environment ) => Expr
 export type NativeFExpr = ( args : Expr[], env: Environment ) => Expr
 
 export type Lambda  = { type : 'LAMBDA',  params : List, body : List }

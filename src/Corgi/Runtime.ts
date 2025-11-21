@@ -24,6 +24,10 @@ type Kontinuation =
 
 export class Machine {
 
+    step (expr : AST.Expr, env : Environment, kont : Kontinuation) : boolean {
+        return false;
+    }
+
     // Expression evaluator
     evaluate (expr : AST.Expr, env : Environment) : AST.Expr {
         if (DEBUG) DUMP( 'TICK', expr, env );
@@ -75,17 +79,12 @@ export class Machine {
 
     // apply a function, builtin or fexpr
     apply (top : AST.Callable, rest : AST.List, env : Environment) : AST.Expr {
-        switch (true) {
-        case TypeUtil.isFExpr(top):
-            if (DEBUG) LOG('++ APPLY *FEXPR*', top);
-            return top.body( ListUtil.flatten( rest ), env );
-        case TypeUtil.isNative(top):
-            if (DEBUG) LOG('++ APPLY *NATIVE*', top);
-            return top.body( ListUtil.flatten( this.evaluate( rest, env ) as AST.List ) );
-        case TypeUtil.isLambda(top):
-            if (DEBUG) LOG('++ APPLY *LAMBDA*', top);
+
+        const evalArgs = () => ListUtil.flatten(this.evaluate( rest, env ) as AST.List);
+
+        const makeLocalEnv = () => {
             let params = ListUtil.flatten(top.params);
-            let args   = ListUtil.flatten(this.evaluate( rest, env ) as AST.List);
+            let args   = evalArgs();
             let localE = env.derive();
             for (let i = 0; i < params.length; i++) {
                 let param = params[i];
@@ -94,7 +93,19 @@ export class Machine {
                 TypeUtil.assertExpr(arg);
                 localE.assign(param, arg);
             }
-            return this.evaluate( top.body, localE );
+            return localE;
+        }
+
+        switch (true) {
+        case TypeUtil.isFExpr(top):
+            if (DEBUG) LOG('++ APPLY *FEXPR*', top);
+            return top.body( ListUtil.flatten( rest ), env );
+        case TypeUtil.isNative(top):
+            if (DEBUG) LOG('++ APPLY *NATIVE*', top);
+            return top.body( makeLocalEnv() );
+        case TypeUtil.isLambda(top):
+            if (DEBUG) LOG('++ APPLY *LAMBDA*', top);
+            return this.evaluate( top.body, makeLocalEnv() );
         default:
             throw new Error(`Unknown Callable Type`);
         }
@@ -182,8 +193,9 @@ type NumBinOp  = (lhs : number, rhs : number) => number
 function liftPredicate (pred : Predicate) : AST.Native {
     return ASTUtil.Native(
         ListUtil.create( ASTUtil.Var('n'), ASTUtil.Var('m') ),
-        (args : AST.Expr[]) : AST.Expr => {
-            let [ lhs, rhs ] = args;
+        (env: Environment) : AST.Expr => {
+            let lhs = env.lookup(ASTUtil.Var('n'));
+            let rhs = env.lookup(ASTUtil.Var('m'));
             TypeUtil.assertLiteral(lhs);
             TypeUtil.assertLiteral(rhs);
             return pred(lhs.value, rhs.value) ? ASTUtil.True() : ASTUtil.False();
@@ -194,8 +206,9 @@ function liftPredicate (pred : Predicate) : AST.Native {
 function liftNumBinOp (binop : NumBinOp) : AST.Native {
     return ASTUtil.Native(
         ListUtil.create( ASTUtil.Var('n'), ASTUtil.Var('m') ),
-        (args : AST.Expr[]) : AST.Expr => {
-            let [ lhs, rhs ] = args;
+        (env: Environment) : AST.Expr => {
+            let lhs = env.lookup(ASTUtil.Var('n'));
+            let rhs = env.lookup(ASTUtil.Var('m'));
             TypeUtil.assertNum(lhs);
             TypeUtil.assertNum(rhs);
             return ASTUtil.Num( binop(lhs.value, rhs.value) );
