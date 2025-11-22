@@ -21,37 +21,22 @@ export type List = Cons | Nil
 
 // Named Things
 
-export type Word = { type : 'WORD', ident : string }
-export type Var  = { type : 'VAR',  ident : string }
-
-export type Ident = Word | Var
-
-// Callings things
-
-export type Apply = { type : 'APPLY', call : Ident, args : List }
-
-// -----------------------------------------------------------------------------
-// Runtime either has these things or evalutes to them
-// -----------------------------------------------------------------------------
+export type Sym = { type : 'SYM', ident : string }
 
 // Callables
 
 export type NativeFunc  = ( env : Env ) => Expr
 export type NativeFExpr = ( args : Expr[], env : Env ) => Expr
 
-export type Native = { type : 'NATIVE',  params : List, body : NativeFunc  }
-export type FExpr  = { type : 'FEXPR',   params : List, body : NativeFExpr }
-export type Lambda = { type : 'LAMBDA', params : List, body : List, env : Env }
+export type Native = { type : 'NATIVE', params : List, body : NativeFunc  }
+export type FExpr  = { type : 'FEXPR',  params : List, body : NativeFExpr }
+export type Lambda = { type : 'LAMBDA', params : List, body : Expr, env : Env }
 
 export type Callable = Lambda | Native | FExpr
 
-// -----------------------------------------------------------------------------
-// VM uses these things ...
-// -----------------------------------------------------------------------------
+// all of them at once ...
 
-export type Term  = Literal | List | Callable // cannot be evaluated
-export type Abs   = Ident | Apply             // must be evaluated
-export type Expr  = Abs | Term
+export type Expr  = Literal | List | Sym | Callable
 
 // -----------------------------------------------------------------------------
 
@@ -67,14 +52,11 @@ namespace AST {
 
     export function Native (params : List, body : NativeFunc)  : Native  { return { type : 'NATIVE', params, body } }
     export function FExpr  (params : List, body : NativeFExpr) : FExpr   { return { type : 'FEXPR',  params, body } }
-    export function Lambda (params : List, body : List, env : Env) : Lambda {
+    export function Lambda (params : List, body : Expr, env : Env) : Lambda {
         return { type : 'LAMBDA', params, body, env }
     }
 
-    export function Word (ident : string) : Word { return { type : 'WORD', ident } }
-    export function Var  (ident : string) : Var  { return { type : 'VAR',  ident } }
-
-    export function Apply (call : Ident, args : List) : Apply { return { type : 'APPLY', call, args } }
+    export function Sym (ident : string) : Sym { return { type : 'SYM',  ident } }
 }
 
 namespace ListUtil {
@@ -131,7 +113,7 @@ namespace Parser {
         case token == 'true'       : return AST.True();
         case token == 'false'      : return AST.False();
         case !isNaN(Number(token)) : return AST.Num(Number(token));
-        case  isNaN(Number(token)) : return AST.Var(token);
+        case  isNaN(Number(token)) : return AST.Sym(token);
         default:
             throw new Error(`Huh?`)
         }
@@ -155,16 +137,7 @@ namespace Parser {
 
     function buildTree (sexpr : SExpr) : Expr {
         if (Array.isArray(sexpr)) {
-            let list = sexpr.map(buildTree);
-
-            if (list.length == 0) return AST.Nil();
-
-            if (list[0] != undefined && list[0].type == 'VAR') {
-                let [ call, ...args ] = list;
-                return AST.Apply( AST.Word( call.ident ), ListUtil.make( ...args ) );
-            } else {
-                return ListUtil.make( ...list )
-            }
+            return ListUtil.make( ...sexpr.map(buildTree) )
         } else {
             return sexpr;
         }
@@ -177,25 +150,16 @@ namespace Parser {
         case 'STR'    : return `"${expr.value}"`;
         case 'NIL'    : return '()';
         case 'CONS'   : return `(${ ListUtil.flatten(expr).map(format).join(' ') })`;
-
-        case 'WORD'   : return expr.ident;
-        case 'VAR'    : return expr.ident;
-
+        case 'SYM'    : return expr.ident;
         case 'LAMBDA' : return `(lambda ${format(expr.params)} ${format(expr.body)})`;
         case 'NATIVE' : return `(native ${format(expr.params)} #:native)`;
         case 'FEXPR'  : return `(fexpr ${format(expr.params)} @:fexpr)`;
-
-        case 'APPLY'  : return `(${format(expr.call)} ${ ListUtil.flatten(expr.args).map(format).join(' ') })`;
         default:
             return 'XXX'
         }
     }
 
 }
-
-//let ast = Parser.parse(`(foo 1 (+ 2 10) (bar 2 3))`);
-//console.log(JSON.stringify(ast, null, 4));
-//console.log(Parser.format(ast));
 
 // -----------------------------------------------------------------------------
 
@@ -209,13 +173,13 @@ export class Env {
         this.parent = parent;
     }
 
-    lookup (name : Ident) : Expr {
+    lookup (name : Sym) : Expr {
         let result = this.bindings.get(name.ident) ?? this.parent?.lookup(name);
         if (result == undefined) throw new Error(`Unable to find ${name.type}(${name.ident}) in E`);
         return result;
     }
 
-    assign (name : Ident, value : Expr) : void {
+    assign (name : Sym, value : Expr) : void {
         this.bindings.set(name.ident, value);
     }
 
@@ -229,35 +193,181 @@ export class Env {
 }
 
 // -----------------------------------------------------------------------------
+// Builtin Helpers
+// -----------------------------------------------------------------------------
 
-class Machine {
-
-    //step (state : State) : State {}
-
-    // gets an expression to evaluated
-    // focuses on building, calling,
-    // and finding things.
-    //
-    // focuses on:
-    // - looking up variables
-    // - building lambdas
-    // - initiating function calls
-    //
-    // mostly just c & e
-    // mostly create and read
-    //evaluate (state : Evaluate) : Continue {}
-
-    // gets a value to be returned and
-    // performs any cleanup necessary
-    // and delivers the value to
-    // a waiting continuation.
-    //
-    // focuses on
-    // - return values to waiting callers
-    // - stack frames? scope cleanups?
-    // - terminal if k is empty
-    //
-    // mostly just k & e
-    // mostly create and write/update
-    //kontinue (state : Continue) : Evaluate {}
+function assertSym (v : any) : asserts v is Sym {
+    if (v.type != 'SYM') throw new Error(`Expected Sym and got ${JSON.stringify(v)}`);
 }
+
+function assertList (v : any) : asserts v is List {
+    if (v.type != 'CONS' && v.type != 'NIL')
+        throw new Error(`Expected List and got ${JSON.stringify(v)}`);
+}
+
+function assertCallable (v : any) : asserts v is Callable {
+    if (!isCallable(v)) throw new Error(`Expected Callable and got ${JSON.stringify(v)}`);
+}
+
+function isCallable (v : any) : v is Callable {
+    return v.type == 'FEXPR' || v.type == 'NATIVE' || v.type == 'LAMBDA'
+}
+
+function assertLiteral (v : any) : asserts v is Literal {
+    if (v.type != 'NUM' && v.type != 'STR' && v.type != 'BOOL')
+        throw new Error(`Expected Literal and got ${JSON.stringify(v)}`);
+}
+
+function assertNum (v : any) : asserts v is Num {
+    if (v.type != 'NUM') throw new Error(`Expected Num and got ${JSON.stringify(v)}`);
+}
+
+function assertBool (v : any) : asserts v is Bool {
+    if (v.type != 'BOOL') throw new Error(`Expected Bool and got ${JSON.stringify(v)}`);
+}
+
+// ...
+
+type Predicate = (lhs : string | number | boolean, rhs : string | number | boolean) => boolean
+type NumBinOp  = (lhs : number, rhs : number) => number
+
+function liftPredicate (pred : Predicate) : Native {
+    return AST.Native(
+        ListUtil.make( AST.Sym('n'), AST.Sym('m') ),
+        (env: Env) : Expr => {
+            let lhs = env.lookup(AST.Sym('n'));
+            let rhs = env.lookup(AST.Sym('m'));
+            assertLiteral(lhs);
+            assertLiteral(rhs);
+            return pred(lhs.value, rhs.value) ? AST.True() : AST.False();
+        }
+    )
+}
+
+function liftNumBinOp (binop : NumBinOp) : Native {
+    return AST.Native(
+        ListUtil.make( AST.Sym('n'), AST.Sym('m') ),
+        (env: Env) : Expr => {
+            let lhs = env.lookup(AST.Sym('n'));
+            let rhs = env.lookup(AST.Sym('m'));
+            assertNum(lhs);
+            assertNum(rhs);
+            return AST.Num( binop(lhs.value, rhs.value) );
+        }
+    )
+}
+
+// -----------------------------------------------------------------------------
+
+
+class Interpreter {
+
+    evaluate (expr : Expr, env : Env) : Expr {
+        console.log(`EVAL (${expr.type})`, Parser.format(expr));
+        switch (expr.type) {
+        case 'NUM'   :
+        case 'STR'   :
+        case 'BOOL'  : return expr;
+        case 'SYM'   : return env.lookup(expr);
+        case 'NIL'   : return expr;
+        case 'CONS'  :
+            let head = this.evaluate(expr.head, env);
+            if (isCallable(head)) {
+                return this.apply( head, expr.tail, env );
+            } else {
+                return AST.Cons( head, this.evaluate(expr.tail, env) as List );
+            }
+        default:
+            throw new Error('WTF!');
+        }
+    }
+
+    // apply a function, builtin or fexpr
+    apply (call : Callable, args : List, env : Env) : Expr {
+        console.log(`APPLY ${Parser.format(call)} -> `, Parser.format(args));
+
+        const evalArgs     = () => ListUtil.flatten( this.evaluate( args, env ) as List );
+        const makeLocalEnv = () => {
+            let params = ListUtil.flatten(call.params);
+            let args   = evalArgs();
+            let localE = env.derive();
+            for (let i = 0; i < params.length; i++) {
+                let param = params[i];
+                assertSym(param);
+                // FIXME ...
+                let arg = args[i] as Expr;
+                localE.assign( param, arg );
+            }
+            return localE;
+        }
+
+        switch (call.type) {
+        case 'FEXPR':
+            return call.body( ListUtil.flatten( args ), env );
+        case 'NATIVE':
+            return call.body( makeLocalEnv() );
+        case 'LAMBDA':
+            return this.evaluate( call.body, makeLocalEnv() );
+        default:
+            throw new Error(`Unknown Callable Type`);
+        }
+    }
+
+    createRootEnvironment () : Env {
+        let env = new Env();
+
+        env.assign( AST.Sym('lambda'), AST.FExpr(
+            ListUtil.make( AST.Sym('params'), AST.Sym('body') ),
+            (args : Expr[], env : Env) : Expr => {
+                let [ params, body ] = args;
+                assertList(params);
+                assertList(body);
+                return AST.Lambda( params as List, body as Expr, env );
+            }
+        ));
+
+        env.assign( AST.Sym('if'), AST.FExpr(
+            ListUtil.make( AST.Sym('cond'), AST.Sym('then'), AST.Sym('else') ),
+            (args : Expr[], env : Env) : Expr => {
+                let [ cond, thenBranch, elseBranch ] = args;
+                assertList(cond);
+                assertList(thenBranch);
+                assertList(elseBranch);
+                let result = this.evaluate( cond as Expr, env );
+                assertBool(result);
+                return this.evaluate( result.value ? elseBranch : thenBranch, env );
+            }
+        ));
+
+        env.assign( AST.Sym('=='), liftPredicate((n, m) => n == m));
+        env.assign( AST.Sym('!='), liftPredicate((n, m) => n != m));
+
+        env.assign( AST.Sym('>'),  liftPredicate((n, m) => n >  m));
+        env.assign( AST.Sym('>='), liftPredicate((n, m) => n >= m));
+        env.assign( AST.Sym('<='), liftPredicate((n, m) => n <= m));
+        env.assign( AST.Sym('<'),  liftPredicate((n, m) => n <  m));
+
+        env.assign( AST.Sym('+'),  liftNumBinOp((n, m) => n + m));
+        env.assign( AST.Sym('-'),  liftNumBinOp((n, m) => n - m));
+        env.assign( AST.Sym('*'),  liftNumBinOp((n, m) => n * m));
+        env.assign( AST.Sym('/'),  liftNumBinOp((n, m) => n / m));
+        env.assign( AST.Sym('%'),  liftNumBinOp((n, m) => n % m));
+
+        return env;
+    }
+}
+
+// -----------------------------------------------------------------------------
+
+let ast = Parser.parse(`((lambda (x y) (+ x y)) 10 20)`);
+
+//console.log(JSON.stringify(ast, null, 4));
+console.log(Parser.format(ast));
+
+let i   = new Interpreter();
+let env = i.createRootEnvironment();
+let got = i.evaluate( ast, env );
+
+//console.log(JSON.stringify(got, null, 4));
+console.log(Parser.format(got));
+
