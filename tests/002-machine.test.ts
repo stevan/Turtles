@@ -271,8 +271,6 @@ while ($opq->[-1][0] ne 'HOST') {
   $step_func{$op}->($cxs, $opq, @args);
 }
 
-*/
-
 interface Context {
     expr_stack : Expr[];
     scope      : Env;
@@ -280,6 +278,9 @@ interface Context {
     evaluate(expr : Expr) : Expr;
     derive() : Context;
 }
+
+*/
+
 
 
 type Operation = [ string, Expr[] ]
@@ -407,7 +408,7 @@ class Machine {
     }
 }
 
-let ast = Parser.parse(`(+ 10 20)`);
+let ast = Parser.parse(`(+ (- 15 5) (* 2 10))`);
 
 //console.log(JSON.stringify(ast, null, 4));
 console.log(Parser.format(ast));
