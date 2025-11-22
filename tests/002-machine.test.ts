@@ -259,10 +259,170 @@ function liftNumBinOp (binop : NumBinOp) : Native {
 
 // -----------------------------------------------------------------------------
 
+/*
+
+# The two data structures
+$cxs  = [ [$expr, $scope], ... ]  # Context stack (C+E)
+$opq  = [ [OP, @args], ... ]       # Operation queue (K)
+
+# The execution loop
+while ($opq->[-1][0] ne 'HOST') {
+  my ($op, @args) = @{pop @$opq};
+  $step_func{$op}->($cxs, $opq, @args);
+}
+
+*/
+
+interface Context {
+    expr_stack : Expr[];
+    scope      : Env;
+
+    evaluate(expr : Expr) : Expr;
+    derive() : Context;
+}
+
+
+type Operation = [ string, Expr[] ]
+
+
+class Machine {
+
+    run (expr : Expr, env : Env) : void {
+
+        let queue : Operation[] = [
+            [ 'HALT', [] ],
+            [ 'EVAL', [ expr ] ]
+        ];
+
+        while (queue.length > 0) {
+            console.log('__ TICK '+('_'.repeat(72)));
+
+            let [ op, exprs ] = queue.pop() as Operation;
+
+            let caller = queue.at(-1) as Operation;
+
+            switch (op) {
+            case 'EVAL':
+                let [ expr, ...rest ] = exprs;
+                queue.push(this.evaluate( expr as Expr, env ));
+                if (rest.length > 0) queue.push([ 'JUST', rest ])
+                break;
+            case 'APPLY':
+                let [ call, ...args ] = exprs;
+                if (isCallable(call)) {
+                    queue.push( this.apply( call as Native, args, env ) );
+                } else {
+                    queue.push([ 'JUST', exprs ]);
+                }
+                break;
+            case 'CALL':
+                let cons = exprs.at(0) as Cons;
+                queue.push(
+                    [ 'APPLY', [] ],
+                    [ 'EVAL',  [ cons.head ] ],
+                    [ 'EVAL',  [ cons.tail ] ],
+                );
+                break;
+            case 'JUST':
+                caller[1].push( ...exprs );
+                break;
+            }
+
+            console.log('='.repeat(80));
+            console.log(` %ENV :`, env.DUMP());
+            console.log('QUEUE :', queue.map(([op, args]) => `${op}[${
+                args.map(Parser.format).join(', ')
+            }]`).join('; '));
+            console.log('-'.repeat(80));
+        }
+
+    }
+
+
+    evaluate (expr : Expr, env : Env) : Operation {
+        console.log(`>> EVAL [${expr.type}]`, Parser.format(expr));
+        switch (expr.type) {
+        case 'NUM'   :
+        case 'STR'   :
+        case 'BOOL'  :
+            return [ 'JUST', [ expr ] ];
+        case 'SYM'   :
+            return [ 'JUST', [ env.lookup(expr) ] ];
+        case 'CONS'  :
+            return [ 'CALL', [ expr ] ]
+        case 'NIL'   :
+            return [ 'NULL', [ expr ] ]
+        default:
+            throw new Error('FUCK!');
+        }
+    }
+
+    apply (call : Callable, args : Expr[], env : Env) : Operation {
+        console.log(`>> APPLY ${Parser.format(call)} -> `, args.map(Parser.format));
+
+        const makeLocalEnv = () => {
+            let params = ListUtil.flatten(call.params);
+            let localE = env.derive();
+            for (let i = 0; i < params.length; i++) {
+                let param = params[i];
+                let arg   = args[i];
+                assertSym(param);
+                if (arg == undefined) throw new Error('BAD ARG!');
+                localE.assign( param, arg as Expr );
+            }
+            console.log(`(local) %ENV :`, localE.DUMP());
+            return localE;
+        }
+
+        switch (call.type) {
+        case 'FEXPR':
+            return [ 'EVAL', [ call.body( args, env ) ] ];
+        case 'NATIVE':
+            return [ 'JUST', [ call.body( makeLocalEnv() ) ] ];
+        case 'LAMBDA':
+            return [ 'CALL', [ call.body ] ]; // BROKEN!
+        default:
+            throw new Error(`Unknown Callable Type`);
+        }
+    }
+
+    createRootEnvironment () : Env {
+        let env = new Env();
+
+        env.assign( AST.Sym('=='), liftPredicate((n, m) => n == m));
+        env.assign( AST.Sym('!='), liftPredicate((n, m) => n != m));
+
+        env.assign( AST.Sym('>'),  liftPredicate((n, m) => n >  m));
+        env.assign( AST.Sym('>='), liftPredicate((n, m) => n >= m));
+        env.assign( AST.Sym('<='), liftPredicate((n, m) => n <= m));
+        env.assign( AST.Sym('<'),  liftPredicate((n, m) => n <  m));
+
+        env.assign( AST.Sym('+'),  liftNumBinOp((n, m) => n + m));
+        env.assign( AST.Sym('-'),  liftNumBinOp((n, m) => n - m));
+        env.assign( AST.Sym('*'),  liftNumBinOp((n, m) => n * m));
+        env.assign( AST.Sym('/'),  liftNumBinOp((n, m) => n / m));
+        env.assign( AST.Sym('%'),  liftNumBinOp((n, m) => n % m));
+
+        return env;
+    }
+}
+
+let ast = Parser.parse(`(+ 10 20)`);
+
+//console.log(JSON.stringify(ast, null, 4));
+console.log(Parser.format(ast));
+
+let m   = new Machine();
+let env = m.createRootEnvironment();
+
+m.run( ast, env );
+
+
 
 class Interpreter {
 
     evaluate (expr : Expr, env : Env) : Expr {
+        console.log(`%ENV `, env.DUMP());
         console.log(`EVAL (${expr.type})`, Parser.format(expr));
         switch (expr.type) {
         case 'NUM'   :
@@ -358,6 +518,7 @@ class Interpreter {
 }
 
 // -----------------------------------------------------------------------------
+/*
 
 let ast = Parser.parse(`((lambda (x y) (+ x y)) 10 20)`);
 
@@ -371,3 +532,4 @@ let got = i.evaluate( ast, env );
 //console.log(JSON.stringify(got, null, 4));
 console.log(Parser.format(got));
 
+*/
