@@ -1,7 +1,7 @@
 
 
 // -----------------------------------------------------------------------------
-// Core Types
+// Parser Constructs these things ...
 // -----------------------------------------------------------------------------
 
 // Literals
@@ -19,42 +19,39 @@ export type Cons = { type : 'CONS', head : Expr, tail : List }
 
 export type List = Cons | Nil
 
-// Callables
-
-export type NativeFunc  = ( env : Environment ) => Value
-export type NativeFExpr = ( args : Expr[], env : Environment ) => Value
-
-export type Native  = { type : 'NATIVE',  params : List, body : NativeFunc  }
-export type FExpr   = { type : 'FEXPR',   params : List, body : NativeFExpr }
-export type Closure = { type : 'CLOSURE', params : List, body : List, env : Environment }
-
-export type Callable = Closure | Native | FExpr
-
-// ...
-
-export type Value = Literal | List | Callable
-
-// -----------------------------------------------------------------------------
-// Expressions
-// -----------------------------------------------------------------------------
-
 // Named Things
 
-export type Ident = string
+export type Word = { type : 'WORD', ident : string }
+export type Var  = { type : 'VAR',  ident : string }
 
-export type Word = { type : 'WORD', ident : Ident }
-export type Var  = { type : 'VAR',  ident : Ident }
-
-export type Identifier = Word | Var
+export type Ident = Word | Var
 
 // Callings things
 
-export type Apply = { type : 'APPLY', call : Identifier, args : List }
-export type Const = { type : 'CONST', literal : Literal }
+export type Apply = { type : 'APPLY', call : Ident, args : List }
 
-// ...
+// -----------------------------------------------------------------------------
+// Runtime either has these things or evalutes to them
+// -----------------------------------------------------------------------------
 
-export type Expr = Apply | Const | Identifier | Value
+// Callables
+
+export type NativeFunc  = ( env : Env ) => Expr
+export type NativeFExpr = ( args : Expr[], env : Env ) => Expr
+
+export type Native  = { type : 'NATIVE',  params : List, body : NativeFunc  }
+export type FExpr   = { type : 'FEXPR',   params : List, body : NativeFExpr }
+export type Closure = { type : 'CLOSURE', params : List, body : List, env : Env }
+
+export type Callable = Closure | Native | FExpr
+
+// -----------------------------------------------------------------------------
+// VM uses these things ...
+// -----------------------------------------------------------------------------
+
+export type Term  = Literal | List | Callable // cannot be evaluated
+export type Abs   = Ident | Apply             // must be evaluated
+export type Expr  = Abs | Term
 
 // -----------------------------------------------------------------------------
 
@@ -70,15 +67,14 @@ namespace AST {
 
     export function Native  (params : List, body : NativeFunc)  : Native  { return { type : 'NATIVE', params, body } }
     export function FExpr   (params : List, body : NativeFExpr) : FExpr   { return { type : 'FEXPR',  params, body } }
-    export function Closure (params : List, body : List, env : Environment) : Closure {
+    export function Closure (params : List, body : List, env : Env) : Closure {
         return { type : 'CLOSURE', params, body, env }
     }
 
-    export function Word (ident : Ident) : Word { return { type : 'WORD', ident } }
-    export function Var  (ident : Ident) : Var  { return { type : 'VAR',  ident } }
+    export function Word (ident : string) : Word { return { type : 'WORD', ident } }
+    export function Var  (ident : string) : Var  { return { type : 'VAR',  ident } }
 
-    export function Apply (call : Identifier, args : List) : Apply { return { type : 'APPLY', call, args } }
-    export function Const (literal : Literal)              : Const { return { type : 'CONST', literal } }
+    export function Apply (call : Ident, args : List) : Apply { return { type : 'APPLY', call, args } }
 }
 
 namespace ListUtil {
@@ -186,7 +182,6 @@ namespace Parser {
         case 'FEXPR'   : return `(fexpr ${format(expr.params)} @:fexpr)`;
 
         case 'APPLY'   : return `(${format(expr.call)} ${format(expr.args)})`;
-        case 'CONST'   : return format(expr.literal);
         default:
             return 'XXX'
         }
@@ -196,28 +191,28 @@ namespace Parser {
 
 // -----------------------------------------------------------------------------
 
-export type MaybeEnvironment = Environment | undefined;
+export type MaybeEnv = Env | undefined;
 
-export class Environment {
-    public parent   : MaybeEnvironment;
-    public bindings : Map<string, Value> = new Map<string, Value>();
+export class Env {
+    public parent   : MaybeEnv;
+    public bindings : Map<string, Expr> = new Map<string, Expr>();
 
-    constructor (parent : MaybeEnvironment = undefined) {
+    constructor (parent : MaybeEnv = undefined) {
         this.parent = parent;
     }
 
-    lookup (name : Identifier) : Value {
+    lookup (name : Ident) : Expr {
         let result = this.bindings.get(name.ident) ?? this.parent?.lookup(name);
         if (result == undefined) throw new Error(`Unable to find ${name.type}(${name.ident}) in E`);
         return result;
     }
 
-    assign (name : Identifier, value : Value) : void {
+    assign (name : Ident, value : Expr) : void {
         this.bindings.set(name.ident, value);
     }
 
-    derive () : Environment { return new Environment( this ) }
-    depth  () : number      { return 1 + (this.parent?.depth() ?? 0) }
+    derive () : Env    { return new Env( this ) }
+    depth  () : number { return 1 + (this.parent?.depth() ?? 0) }
 
     DUMP () : string {
         return `%E[${this.depth()}]{${ [ ...this.bindings.keys() ].map((e) => ("`" + e)).join(', ') }} `
