@@ -189,6 +189,12 @@ namespace Parser {
 
 }
 
+let ast = Parser.parse(``, ['foo']);
+
+console.log(JSON.stringify(ast, null, 4));
+console.log(format(ast));
+
+
 // -----------------------------------------------------------------------------
 
 export type MaybeEnv = Env | undefined;
