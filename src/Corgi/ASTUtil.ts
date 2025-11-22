@@ -14,9 +14,9 @@ export function Pair (first : AST.Value, second : AST.Value) : AST.Pair { return
 export function Nil  ()                                 : AST.Nil  { return { type : 'NIL'} }
 export function Cons (head : AST.Expr, tail : AST.List) : AST.List { return { type : 'CONS', head, tail } }
 
-export function Lambda (params : AST.List, body : AST.List, env : AST.Env) : AST.Lambda { return { type : 'LAMBDA', params, body, env } }
-export function Native (params : AST.List, body : AST.NativeFunc)          : AST.Native { return { type : 'NATIVE', params, body } }
-export function FExpr  (params : AST.List, body : AST.NativeFExpr)         : AST.FExpr  { return { type : 'FEXPR',  params, body } }
+export function Closure (params : AST.List, body : AST.List, env : AST.Env) : AST.Closure { return { type : 'CLOSURE', params, body, env } }
+export function Native  (params : AST.List, body : AST.NativeFunc)          : AST.Native  { return { type : 'NATIVE', params, body } }
+export function FExpr   (params : AST.List, body : AST.NativeFExpr)         : AST.FExpr   { return { type : 'FEXPR',  params, body } }
 
 // Expressions
 

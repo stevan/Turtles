@@ -31,7 +31,7 @@ export type Pair = { type : 'PAIR', first : Value, second : Value }
 // Lists
 
 export type Nil  = { type : 'NIL' }
-export type Cons = { type : 'CONS', head : Expr, tail : List }
+export type Cons = { type : 'CONS', head : Value, tail : List }
 
 export type List = Cons | Nil
 
@@ -40,15 +40,15 @@ export type List = Cons | Nil
 export type NativeFunc  = ( env : Env ) => Value
 export type NativeFExpr = ( args : Expr[], env : Env ) => Value
 
-export type Native  = { type : 'NATIVE', params : List, body : NativeFunc  }
-export type FExpr   = { type : 'FEXPR',  params : List, body : NativeFExpr }
-export type Lambda  = { type : 'LAMBDA', params : List, body : List, env : Env }
+export type Native  = { type : 'NATIVE',  params : List, body : NativeFunc  }
+export type FExpr   = { type : 'FEXPR',   params : List, body : NativeFExpr }
+export type Closure = { type : 'CLOSURE', params : List, body : List, env : Env }
 
-export type Callable = Lambda | Native | FExpr
+export type Callable = Closure | Native | FExpr
 
 // ...
 
-export type Value = Literal | List | Callable
+export type Value = Literal | List | Pair | Callable
 
 // -----------------------------------------------------------------------------
 // Expressions
@@ -66,10 +66,11 @@ export type Identifier = Word | Var
 // Callings things
 
 export type Apply = { type : 'APPLY', call : Identifier, args : List }
+export type Just  = { type : 'JUST', literal : Literal }
 
 // ...
 
-export type Expr = Apply | Identifier | Value
+export type Expr = Apply | Identifier
 
 // -----------------------------------------------------------------------------
 

@@ -6,37 +6,31 @@ import * as TypeUtil from './TypeUtil'
 import * as ListUtil from './ListUtil'
 import * as Parser   from './Parser'
 
-import { Environment, MaybeEnvironment } from './Environment'
+import { Environment } from './Environment'
 
-export class Machine {
+export class Evaluator {
 
     // Expression evaluator
     evaluate (expr : AST.Expr, env : AST.Env) : AST.Value {
         if (DEBUG) DUMP( 'TICK', expr, env );
         switch (true) {
         case TypeUtil.isCons(expr):
-            if (DEBUG) LOG('Got CONS');
             let top = this.evaluate( ListUtil.head(expr), env );
             switch (true) {
             case TypeUtil.isCallable(top):
-                if (DEBUG) LOG('*CALL*', top);
                 return this.apply( top, ListUtil.tail(expr), env )
             default:
-                if (DEBUG) LOG('*LIST*');
                 return ASTUtil.Cons( top, this.evaluate( ListUtil.tail(expr), env ) as AST.List );
             }
         case TypeUtil.isIdentifier(expr):
-            if (DEBUG) LOG('Got Idenfifier', expr);
             return env.lookup(expr);
         case TypeUtil.isLiteral(expr):
-            if (DEBUG) LOG('Got Literal', expr);
             return expr;
         case TypeUtil.isNil(expr):
-            if (DEBUG) LOG('()', expr);
             // XXX - not sure if this is correct ...
             return expr;
         default:
-            throw new Error('WTF!');
+            throw new Error('OOPS!!');
         }
     }
 
@@ -61,13 +55,10 @@ export class Machine {
 
         switch (true) {
         case TypeUtil.isFExpr(top):
-            if (DEBUG) LOG('++ APPLY *FEXPR*', top);
             return top.body( ListUtil.flatten( rest ), env );
         case TypeUtil.isNative(top):
-            if (DEBUG) LOG('++ APPLY *NATIVE*', top);
             return top.body( makeLocalEnv() );
-        case TypeUtil.isLambda(top):
-            if (DEBUG) LOG('++ APPLY *LAMBDA*', top);
+        case TypeUtil.isClosure(top):
             return this.evaluate( top.body, makeLocalEnv() );
         default:
             throw new Error(`Unknown Callable Type`);
@@ -85,7 +76,7 @@ export class Machine {
                 let [ params, body ] = args;
                 TypeUtil.assertList(params);
                 TypeUtil.assertList(body);
-                return ASTUtil.Lambda( params, body, env );
+                return ASTUtil.Closure( params, body, env );
             }
         ));
 

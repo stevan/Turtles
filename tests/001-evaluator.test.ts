@@ -2,8 +2,8 @@
 
 import { Runtime, Parser, ASTUtil, ListUtil } from '../src/Corgi'
 
-let machine = new Runtime.Machine();
-let env     = machine.createRootEnvironment();
+let evaluator = new Runtime.Evaluator();
+let rootEnv   = evaluator.createRootEnvironment();
 
 /*
 let program = Parser.parse(`(
@@ -32,9 +32,10 @@ let program = ListUtil.create(
             )
         )
     ),
+    ListUtil.create( ASTUtil.Var('addit'), ASTUtil.Num(10), ASTUtil.Num(20) ),
     ListUtil.create( ASTUtil.Var('addit'), ASTUtil.Num(11), ASTUtil.Num(20) )
 )
 
 console.log(Parser.format(program));
 
-Runtime.DUMP( 'RESULT', machine.evaluate( program, env ), env );
+Runtime.DUMP( 'RESULT', evaluator.evaluate( program, rootEnv ), rootEnv );

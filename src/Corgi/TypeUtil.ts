@@ -31,11 +31,11 @@ export function assertList   (v : any) : asserts v is AST.List { if (!isList(v))
 
 export function isFExpr      (v : any) : v is AST.FExpr    { return v.type == 'FEXPR'   }
 export function isNative     (v : any) : v is AST.Native   { return v.type == 'NATIVE'  }
-export function isLambda     (v : any) : v is AST.Lambda   { return v.type == 'LAMBDA'  }
-export function isCallable   (v : any) : v is AST.Callable { return isNative(v) || isLambda(v)  || isFExpr(v) }
+export function isClosure    (v : any) : v is AST.Closure  { return v.type == 'CLOSURE' }
+export function isCallable   (v : any) : v is AST.Callable { return isNative(v) || isClosure(v)  || isFExpr(v) }
 
 export function assertFExpr    (v : any) : asserts v is AST.FExpr    { if (!isFExpr(v))    throw new Error("Not FExpr")    }
-export function assertLambda   (v : any) : asserts v is AST.Lambda   { if (!isLambda(v))   throw new Error("Not Lambda")   }
+export function assertClosure  (v : any) : asserts v is AST.Closure  { if (!isClosure(v))   throw new Error("Not Closure")   }
 export function assertNative   (v : any) : asserts v is AST.Native   { if (!isNative(v))   throw new Error("Not Native")   }
 export function assertCallable (v : any) : asserts v is AST.Callable { if (!isCallable(v)) throw new Error("Not Callable") }
 
