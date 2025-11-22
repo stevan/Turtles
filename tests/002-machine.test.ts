@@ -39,11 +39,11 @@ export type Apply = { type : 'APPLY', call : Ident, args : List }
 export type NativeFunc  = ( env : Env ) => Expr
 export type NativeFExpr = ( args : Expr[], env : Env ) => Expr
 
-export type Native  = { type : 'NATIVE',  params : List, body : NativeFunc  }
-export type FExpr   = { type : 'FEXPR',   params : List, body : NativeFExpr }
-export type Closure = { type : 'CLOSURE', params : List, body : List, env : Env }
+export type Native = { type : 'NATIVE',  params : List, body : NativeFunc  }
+export type FExpr  = { type : 'FEXPR',   params : List, body : NativeFExpr }
+export type Lambda = { type : 'LAMBDA', params : List, body : List, env : Env }
 
-export type Callable = Closure | Native | FExpr
+export type Callable = Lambda | Native | FExpr
 
 // -----------------------------------------------------------------------------
 // VM uses these things ...
@@ -65,10 +65,10 @@ namespace AST {
     export function Nil  () : Nil  { return { type : 'NIL'} }
     export function Cons (head : Expr, tail : List) : List { return { type : 'CONS', head, tail } }
 
-    export function Native  (params : List, body : NativeFunc)  : Native  { return { type : 'NATIVE', params, body } }
-    export function FExpr   (params : List, body : NativeFExpr) : FExpr   { return { type : 'FEXPR',  params, body } }
-    export function Closure (params : List, body : List, env : Env) : Closure {
-        return { type : 'CLOSURE', params, body, env }
+    export function Native (params : List, body : NativeFunc)  : Native  { return { type : 'NATIVE', params, body } }
+    export function FExpr  (params : List, body : NativeFExpr) : FExpr   { return { type : 'FEXPR',  params, body } }
+    export function Lambda (params : List, body : List, env : Env) : Lambda {
+        return { type : 'LAMBDA', params, body, env }
     }
 
     export function Word (ident : string) : Word { return { type : 'WORD', ident } }
@@ -113,8 +113,8 @@ namespace ListUtil {
 namespace Parser {
     type SExpr = Expr | SExpr[];
 
-    export function parse (src : string, keywords : string[]) : Expr {
-        let [ sexpr, rest ] = parseTokens( tokenizer( src ), keywords );
+    export function parse (src : string) : Expr {
+        let [ sexpr, rest ] = parseTokens( tokenizer( src ) );
         return buildTree( sexpr );
     }
 
@@ -126,41 +126,45 @@ namespace Parser {
                   .filter(Boolean);
     }
 
-    function lexer (token : string, keywords : string[]) : Expr {
+    function lexer (token : string) : Expr {
         switch (true) {
         case token == 'true'       : return AST.True();
         case token == 'false'      : return AST.False();
         case !isNaN(Number(token)) : return AST.Num(Number(token));
-        case  isNaN(Number(token)) :
-            if (keywords.includes(token)) {
-                return AST.Word(token);
-            } else {
-                return AST.Var(token);
-            }
+        case  isNaN(Number(token)) : return AST.Var(token);
         default:
             throw new Error(`Huh?`)
         }
     }
 
-    function parseTokens (tokens : string[], keywords : string[]) : [ SExpr, string[] ] {
+    function parseTokens (tokens : string[]) : [ SExpr, string[] ] {
         let token = tokens[0];
         if (token == undefined) throw new Error('Undefined Token');
 
         let rest = tokens.slice(1);
-        if (token == '(') return parseList( rest, [], keywords );
+        if (token == '(') return parseList( rest, [] );
 
-        return [ lexer(token, keywords), rest ];
+        return [ lexer(token), rest ];
     }
 
-    function parseList (ts : string[], acc : SExpr[], keywords : string[]) : [ SExpr[], string[] ] {
+    function parseList (ts : string[], acc : SExpr[]) : [ SExpr[], string[] ] {
         if (ts[0] === ')') return [ acc, ts.slice(1) ];
-        let [ expr, remaining ] = parseTokens(ts, keywords);
-        return parseList( remaining, [ ...acc, expr ], keywords );
+        let [ expr, remaining ] = parseTokens(ts);
+        return parseList( remaining, [ ...acc, expr ] );
     }
 
     function buildTree (sexpr : SExpr) : Expr {
         if (Array.isArray(sexpr)) {
-            return ListUtil.make( ...sexpr.map(buildTree) )
+            let list = sexpr.map(buildTree);
+
+            if (list.length == 0) return AST.Nil();
+
+            if (list[0] != undefined && list[0].type == 'VAR') {
+                let [ call, ...args ] = list;
+                return AST.Apply( AST.Word( call.ident ), ListUtil.make( ...args ) );
+            } else {
+                return ListUtil.make( ...list )
+            }
         } else {
             return sexpr;
         }
@@ -168,20 +172,20 @@ namespace Parser {
 
     export function format (expr : Expr) : string {
         switch (expr.type) {
-        case 'BOOL'    : return expr.value ? 'true' : 'false';
-        case 'NUM'     : return expr.value.toString();
-        case 'STR'     : return `"${expr.value}"`;
-        case 'NIL'     : return '()';
-        case 'CONS'    : return `(${ ListUtil.flatten(expr).map(format).join(' ') })`;
+        case 'BOOL'   : return expr.value ? 'true' : 'false';
+        case 'NUM'    : return expr.value.toString();
+        case 'STR'    : return `"${expr.value}"`;
+        case 'NIL'    : return '()';
+        case 'CONS'   : return `(${ ListUtil.flatten(expr).map(format).join(' ') })`;
 
-        case 'WORD'    : return expr.ident;
-        case 'VAR'     : return expr.ident;
+        case 'WORD'   : return expr.ident;
+        case 'VAR'    : return expr.ident;
 
-        case 'CLOSURE' : return `(lambda ${format(expr.params)} ${format(expr.body)})`;
-        case 'NATIVE'  : return `(native ${format(expr.params)} #:native)`;
-        case 'FEXPR'   : return `(fexpr ${format(expr.params)} @:fexpr)`;
+        case 'LAMBDA' : return `(lambda ${format(expr.params)} ${format(expr.body)})`;
+        case 'NATIVE' : return `(native ${format(expr.params)} #:native)`;
+        case 'FEXPR'  : return `(fexpr ${format(expr.params)} @:fexpr)`;
 
-        case 'APPLY'   : return `(${format(expr.call)} ${format(expr.args)})`;
+        case 'APPLY'  : return `(${format(expr.call)} ${ ListUtil.flatten(expr.args).map(format).join(' ') })`;
         default:
             return 'XXX'
         }
@@ -189,11 +193,9 @@ namespace Parser {
 
 }
 
-let ast = Parser.parse(``, ['foo']);
-
-console.log(JSON.stringify(ast, null, 4));
-console.log(format(ast));
-
+//let ast = Parser.parse(`(foo 1 (+ 2 10) (bar 2 3))`);
+//console.log(JSON.stringify(ast, null, 4));
+//console.log(Parser.format(ast));
 
 // -----------------------------------------------------------------------------
 
