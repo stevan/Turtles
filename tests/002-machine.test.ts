@@ -259,32 +259,7 @@ function liftNumBinOp (binop : NumBinOp) : Native {
 
 // -----------------------------------------------------------------------------
 
-/*
-
-# The two data structures
-$cxs  = [ [$expr, $scope], ... ]  # Context stack (C+E)
-$opq  = [ [OP, @args], ... ]       # Operation queue (K)
-
-# The execution loop
-while ($opq->[-1][0] ne 'HOST') {
-  my ($op, @args) = @{pop @$opq};
-  $step_func{$op}->($cxs, $opq, @args);
-}
-
-interface Context {
-    expr_stack : Expr[];
-    scope      : Env;
-
-    evaluate(expr : Expr) : Expr;
-    derive() : Context;
-}
-
-*/
-
-
-
 type Operation = [ string, Expr[] ]
-
 
 class Machine {
 
@@ -305,24 +280,33 @@ class Machine {
             switch (op) {
             case 'EVAL':
                 let [ expr, ...rest ] = exprs;
-                queue.push(this.evaluate( expr as Expr, env ));
+                queue.push( this.evaluate( expr as Expr, env ) );
                 if (rest.length > 0) queue.push([ 'JUST', rest ])
                 break;
-            case 'APPLY':
-                let [ call, ...args ] = exprs;
-                if (isCallable(call)) {
-                    queue.push( this.apply( call as Native, args, env ) );
-                } else {
-                    queue.push([ 'JUST', exprs ]);
-                }
-                break;
-            case 'CALL':
+            case 'EHEAD':
                 let cons = exprs.at(0) as Cons;
                 queue.push(
-                    [ 'APPLY', [] ],
+                    [ 'CALL?', [ cons.tail ] ],
                     [ 'EVAL',  [ cons.head ] ],
-                    [ 'EVAL',  [ cons.tail ] ],
                 );
+                break;
+            case 'APPLY':
+                let [ callable, ...evaledArgs ] = exprs;
+                queue.push( this.apply( callable as Callable, evaledArgs, env ) );
+                break;
+            case 'CALL?':
+                let [ args, call ] = exprs;
+                if (isCallable(call)) {
+                    queue.push(
+                        [ 'APPLY', [ call as Callable ] ],
+                        [ 'EVAL',  [ args as Expr ] ],
+                    );
+                } else {
+                    queue.push(
+                        [ 'JUST', [ call as Expr ] ],
+                        [ 'EVAL', [ args as Expr ] ],
+                    );
+                }
                 break;
             case 'JUST':
                 caller[1].push( ...exprs );
@@ -350,7 +334,7 @@ class Machine {
         case 'SYM'   :
             return [ 'JUST', [ env.lookup(expr) ] ];
         case 'CONS'  :
-            return [ 'CALL', [ expr ] ]
+            return [ 'EHEAD', [ expr ] ]
         case 'NIL'   :
             return [ 'NULL', [ expr ] ]
         default:
@@ -408,7 +392,7 @@ class Machine {
     }
 }
 
-let ast = Parser.parse(`(+ (- 15 5) (* 2 10))`);
+let ast = Parser.parse(`(+ (+ 5 5) (* 2 10))`);
 
 //console.log(JSON.stringify(ast, null, 4));
 console.log(Parser.format(ast));
