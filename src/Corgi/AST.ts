@@ -26,12 +26,12 @@ export type Literal = Num | Str | Bool
 
 // Pairs
 
-export type Pair = { type : 'PAIR', first : Value, second : Value }
+export type Pair = { type : 'PAIR', first : Expr, second : Expr }
 
 // Lists
 
 export type Nil  = { type : 'NIL' }
-export type Cons = { type : 'CONS', head : Value, tail : List }
+export type Cons = { type : 'CONS', head : Expr, tail : List }
 
 export type List = Cons | Nil
 
@@ -66,11 +66,10 @@ export type Identifier = Word | Var
 // Callings things
 
 export type Apply = { type : 'APPLY', call : Identifier, args : List }
-export type Just  = { type : 'JUST', literal : Literal }
 
 // ...
 
-export type Expr = Apply | Identifier
+export type Expr = Apply | Identifier | Value
 
 // -----------------------------------------------------------------------------
 
