@@ -115,12 +115,11 @@ export class Machine {
             break;
         case 'CALL?':
             let [ call ] = k.stack;
-
-            if (Util.Type.isCallable(call)) {
-                this.continueK( Apply(call) );
-            } else {
-                this.continueK( Just(call as Types.Expr) );
-            }
+            this.continueK(
+                Util.Type.isCallable(call)
+                    ? Apply(call)
+                    : Just(...k.stack)
+            );
 
             if (!Util.Type.isNil(k.args)) {
                 this.continueK( Eval(k.args) );
