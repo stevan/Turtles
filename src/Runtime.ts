@@ -4,6 +4,7 @@ import * as AST    from './AST'
 import * as Util   from './Util'
 import * as Parser from './Parser'
 
+import { Context }       from './Context'
 import { Env, MaybeEnv } from './Env'
 
 export namespace DEBUG {
@@ -43,9 +44,9 @@ export type NumBinOp  = (lhs : number, rhs : number) => number
 export function liftPredicate (pred : Predicate) : Types.Native {
     return AST.Native(
         Util.List.make( AST.Sym('n'), AST.Sym('m') ),
-        (env: Env) : Types.Expr => {
-            let lhs = env.lookup(AST.Sym('n'));
-            let rhs = env.lookup(AST.Sym('m'));
+        (ctx : Context) : Types.Expr => {
+            let lhs = ctx.env.lookup(AST.Sym('n'));
+            let rhs = ctx.env.lookup(AST.Sym('m'));
             Util.Type.assertLiteral(lhs);
             Util.Type.assertLiteral(rhs);
             return pred(lhs.value, rhs.value) ? AST.True() : AST.False();
@@ -56,9 +57,9 @@ export function liftPredicate (pred : Predicate) : Types.Native {
 export function liftNumBinOp (binop : NumBinOp) : Types.Native {
     return AST.Native(
         Util.List.make( AST.Sym('n'), AST.Sym('m') ),
-        (env: Env) : Types.Expr => {
-            let lhs = env.lookup(AST.Sym('n'));
-            let rhs = env.lookup(AST.Sym('m'));
+        (ctx : Context) : Types.Expr => {
+            let lhs = ctx.env.lookup(AST.Sym('n'));
+            let rhs = ctx.env.lookup(AST.Sym('m'));
             Util.Type.assertNum(lhs);
             Util.Type.assertNum(rhs);
             return AST.Num( binop(lhs.value, rhs.value) );

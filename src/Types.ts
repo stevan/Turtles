@@ -1,5 +1,5 @@
 
-import type { Env } from './Env'
+import type { Context } from './Context'
 
 // Literals
 
@@ -22,12 +22,12 @@ export type Sym = { type : 'SYM', ident : string }
 
 // Callables
 
-export type NativeFunc  = ( env : Env ) => Expr
-export type NativeFExpr = ( args : Expr[], env : Env ) => Expr
+export type NativeFunc  = ( ctx : Context ) => Expr
+export type NativeFExpr = ( args : Expr[], ctx : Context ) => Expr
 
 export type Native = { type : 'NATIVE', params : List, body : NativeFunc  }
 export type FExpr  = { type : 'FEXPR',  params : List, body : NativeFExpr }
-export type Lambda = { type : 'LAMBDA', params : List, body : Expr, env : Env }
+export type Lambda = { type : 'LAMBDA', params : List, body : Expr, ctx : Context }
 
 export type Callable = Lambda | Native | FExpr
 
