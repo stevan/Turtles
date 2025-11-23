@@ -1,5 +1,4 @@
 
-
 import * as Parser from '../src/Parser'
 import { Machine } from '../src/Machine'
 
