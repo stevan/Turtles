@@ -126,7 +126,6 @@ export class Machine {
             break;
         case 'CALL?':
             let [ call ] = k.stack;
-
             if (Util.Type.isCallable(call)) {
                 switch (call.type) {
                 case 'FEXPR':
