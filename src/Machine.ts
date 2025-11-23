@@ -50,12 +50,14 @@ const DEBUG_ON = true;
 export class Machine {
     public rootEnv : Env;
     public rootCtx : Context;
-    public stack   : Context[] = [];
+    public stack   : Context[]    = [];
+    public queue   : Kontinuation = [];
 
     constructor (env? : MaybeEnv) {
         this.rootEnv = env ?? this.createRootEnvironment();
         this.rootCtx = new Context(this.rootEnv.derive(), (expr) => this.run(expr));
         this.stack.push(this.rootCtx);
+        this.queue.push(Halt());
     }
 
     // c(urrent)c(ontext)
@@ -64,65 +66,63 @@ export class Machine {
     }
 
     run (expr : Types.Expr) : Types.Expr {
-
-        let queue : Kontinuation = [ Halt(), Eval(expr) ];
+        this.queue.push( Eval(expr) );
 
         let result;
+        while (this.queue.length > 0) {
+            let k = this.queue.pop() as Kontinue;
 
-        while (queue.length > 0) {
-            let operation = queue.pop() as Kontinue;
-
-            if (!this.step(operation, this.cc.env, queue)) {
-                if (operation.op != 'HALT') throw new Error('ONLY HALT!');
+            if (!this.step(k)) {
+                if (k.op != 'HALT') throw new Error('ONLY HALT!');
                 if (DEBUG_ON) {
                 console.log('!! HALT '+('_'.repeat(72)));
-                                   KDUMP(this.cc, queue);}
+                                   KDUMP(this.cc, this.queue);}
 
-                result = operation.stack.shift() as Types.Expr;
+                result = k.stack.shift() as Types.Expr;
                 break;
             }
 
-            if (DEBUG_ON) KDUMP(this.cc, queue);
+            if (DEBUG_ON) KDUMP(this.cc, this.queue);
         }
 
         return result ?? AST.Nil();
     }
 
-    returnK ( k : Kontinue, queue : Kontinuation ) : void {
-        let caller = queue.at(-1) as Kontinue;
+    returnK (k : Kontinue) : void {
+        let caller = this.queue.at(-1) as Kontinue;
         caller.stack.push( ...k.stack );
     }
 
-    continueK ( queue : Kontinuation, next : Kontinuation ) : void {
-        queue.push( ...next );
+    continueK (...next : Kontinuation) : void {
+        this.queue.push( ...next );
     }
 
-    step (k : Kontinue, env : Env, queue : Kontinuation) : boolean {
+    step (k : Kontinue) : boolean {
         if (DEBUG_ON) {
         console.log('^ STEP :', KSHOW(k));
         console.log('.'.repeat(80));}
 
         switch (k.op) {
         case 'EVAL':
-            queue.push( this.evaluate( k.expr, env ) );
-            //if (k.stack.length > 0) queue.push(Just(rest));
+            this.continueK( this.evaluate( k.expr ) );
+            if (k.stack.length > 0) throw new Error("WRFD!!!");
             return true;
         case 'EHEAD':
-            queue.push( Call( k.cons.tail ), Eval( k.cons.head ) );
+            this.continueK( Call( k.cons.tail ), Eval( k.cons.head ) );
             return true;
         case 'APPLY':
-            queue.push( this.apply( k.call, k.stack, env ) );
+            this.continueK( this.apply( k.call, k.stack ) );
             return true;
         case 'CALL?':
             let [ call ] = k.stack;
             if (Util.Type.isCallable(call)) {
-                queue.push( Apply(call as Types.Callable), Eval(k.args) );
+                this.continueK( Apply(call as Types.Callable), Eval(k.args) );
             } else {
-                queue.push( Just(call as Types.Expr), Eval(k.args) );
+                this.continueK( Just(call as Types.Expr), Eval(k.args) );
             }
             return true;
         case 'JUST':
-            this.returnK( k, queue );
+            this.returnK( k );
             return true;
         case 'HALT':
             return false;
@@ -132,13 +132,13 @@ export class Machine {
     }
 
 
-    evaluate (expr : Types.Expr, env : Env) : Kontinue {
+    evaluate (expr : Types.Expr) : Kontinue {
         console.log(`>> EVAL [${expr.type}]`, DEBUG.SHOW(expr));
         switch (expr.type) {
         case 'NUM'   :
         case 'STR'   :
         case 'BOOL'  : return Just(expr);
-        case 'SYM'   : return Just(env.lookup(expr));
+        case 'SYM'   : return Just(this.cc.env.lookup(expr));
         case 'CONS'  : return EHead(expr)
         case 'NIL'   : return Just(expr)
         default:
@@ -146,12 +146,12 @@ export class Machine {
         }
     }
 
-    apply (call : Types.Callable, args : Types.Expr[], env : Env) : Kontinue {
+    apply (call : Types.Callable, args : Types.Expr[]) : Kontinue {
         console.log(`>> APPLY ${DEBUG.SHOW(call)} -> `, args.map(DEBUG.SHOW));
 
         const makeLocalEnv = () => {
             let params = Util.List.flatten(call.params);
-            let localE = env.derive();
+            let localE = this.cc.env.derive();
             for (let i = 0; i < params.length; i++) {
                 let param = params[i];
                 let arg   = args[i];
