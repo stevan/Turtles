@@ -24,9 +24,19 @@ function EHead  (cons : Types.Cons)     : EHead { return { op : 'EHEAD', stack :
 function Call   (args : Types.List)     : Call  { return { op : 'CALL?', stack : [], args } }
 function Apply  (call : Types.Callable) : Apply { return { op : 'APPLY', stack : [], call } }
 
-type Kontinue = Halt | Just | Eval | EHead| Call | Apply
-
+type Kontinue     = Halt | Just | Eval | EHead| Call | Apply
 type Kontinuation = Kontinue[];
+
+DEBUG.SHOWK = (k : Kontinue) : string => {
+    switch (k.op) {
+    case 'HALT'  : return `${k.op}()[${k.stack.map(DEBUG.SHOW).join(', ')}]`
+    case 'JUST'  : return `${k.op}()[${k.stack.map(DEBUG.SHOW).join(', ')}]`
+    case 'EVAL'  : return `${k.op}<${DEBUG.SHOW(k.expr)}>[${k.stack.map(DEBUG.SHOW).join(', ')}]`
+    case 'EHEAD' : return `${k.op}<${DEBUG.SHOW(k.cons)}>[${k.stack.map(DEBUG.SHOW).join(', ')}]`
+    case 'CALL?' : return `${k.op}<${DEBUG.SHOW(k.args)}>[${k.stack.map(DEBUG.SHOW).join(', ')}]`
+    case 'APPLY' : return `${k.op}<${DEBUG.SHOW(k.call)}>[${k.stack.map(DEBUG.SHOW).join(', ')}]`
+    }
+}
 
 const DEBUG_ON = false;
 
