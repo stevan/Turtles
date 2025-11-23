@@ -115,13 +115,22 @@ export class Machine {
             break;
         case 'CALL?':
             let [ call ] = k.stack;
-            this.continueK(
-                Util.Type.isCallable(call)
-                    ? Apply(call)
-                    : Just(...k.stack)
-            );
 
-            if (!Util.Type.isNil(k.args)) {
+            if (Util.Type.isCallable(call)) {
+                switch (call.type) {
+                case 'FEXPR':
+                    this.continueK( Apply(call), Just(k.args) );
+                    break;
+                case 'NATIVE':
+                case 'LAMBDA':
+                    this.continueK( Apply(call), Eval(k.args) );
+                    break;
+                default:
+                    throw new Error(`Unknown Callable Type`);
+                }
+            } else {
+                this.continueK( Just(call as Types.Expr) );
+                if (Util.Type.isNil(k.args)) break;
                 this.continueK( Eval(k.args) );
             }
             break;
@@ -145,8 +154,9 @@ export class Machine {
         case 'STR'   :
         case 'BOOL'  : return Just(expr);
         case 'SYM'   : return Just(this.cc.env.lookup(expr));
-        case 'CONS'  : return EHead(expr)
-        case 'NIL'   : return Just(expr)
+        case 'CONS'  : return EHead(expr);
+        case 'NIL'   : return Just(expr);
+        case 'LAMBDA': return Just(expr);
         default:
             throw new Error('FUCK!');
         }
@@ -171,7 +181,7 @@ export class Machine {
 
         switch (call.type) {
         case 'FEXPR':
-            return Eval(call.body( args, this.cc ));
+            return Eval(call.body( Util.List.flatten(args[0] as Types.List), this.cc ));
         case 'NATIVE':
             return Just(call.body( args, this.cc ));
         case 'LAMBDA':
@@ -184,7 +194,15 @@ export class Machine {
     createRootEnvironment () : Env {
         let env = createBaseEnvironment();
 
-        // TODO
+        env.assign( AST.Sym('lambda'), AST.FExpr(
+            Util.List.make( AST.Sym('params'), AST.Sym('body') ),
+            (args : Types.Expr[], ctx : Context) : Types.Expr => {
+                let [ params, body ] = args;
+                Util.Type.assertList(params);
+                Util.Type.assertList(body);
+                return AST.Lambda( params as Types.List, body as Types.Expr, ctx );
+            }
+        ));
 
         return env;
     }
