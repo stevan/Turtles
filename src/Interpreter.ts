@@ -10,6 +10,8 @@ import {
     createBaseEnvironment,
 } from './Runtime'
 
+const DEBUG_ON = false;
+
 export class Interpreter {
     public rootEnv : Env;
     public rootCtx : Context;
@@ -29,8 +31,9 @@ export class Interpreter {
     run (expr : Types.Expr) : Types.Expr {
         let result = this.cc.evaluate(expr);
 
+        if (DEBUG_ON) {
         console.log(`HALT `, DEBUG.SHOW(result));
-        console.log(`%ENV `, DEBUG.DUMP(this.cc.env));
+        console.log(`%ENV `, DEBUG.DUMP(this.cc.env));}
 
         return result;
     }
@@ -43,8 +46,9 @@ export class Interpreter {
     // from.
 
     evaluate (expr : Types.Expr) : Types.Expr {
+        if (DEBUG_ON) {
         console.log(`%ENV `, DEBUG.DUMP(this.cc.env));
-        console.log(`EVAL (${expr.type})`, DEBUG.SHOW(expr));
+        console.log(`EVAL (${expr.type})`, DEBUG.SHOW(expr));}
         switch (expr.type) {
         case 'NUM'   :
         case 'STR'   :
@@ -65,7 +69,8 @@ export class Interpreter {
 
     // apply a function, builtin or fexpr
     apply (call : Types.Callable, args : Types.List) : Types.Expr {
-        console.log(`APPLY ${DEBUG.SHOW(call)} -> `, DEBUG.SHOW(args));
+        if (DEBUG_ON) {
+        console.log(`APPLY ${DEBUG.SHOW(call)} -> `, DEBUG.SHOW(args));}
 
         const evaluateArgs = () : Types.List => this.cc.evaluate( args ) as Types.List;
 
@@ -135,7 +140,7 @@ export class Interpreter {
                 Util.Type.assertList(elseBranch);
                 let result = ctx.evaluate( cond as Types.Expr );
                 Util.Type.assertBool(result);
-                return ctx.evaluate( result.value ? elseBranch : thenBranch );
+                return ctx.evaluate( result.value ? thenBranch : elseBranch );
             }
         ));
 
