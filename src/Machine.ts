@@ -73,7 +73,6 @@ export class Machine {
             let k = this.queue.pop() as Kontinue;
 
             if (!this.step(k)) {
-                if (k.op != 'HALT') throw new Error('ONLY HALT!');
                 if (DEBUG_ON) {
                 console.log('!! HALT '+('_'.repeat(72)));
                                    KDUMP(this.cc, this.queue);}
