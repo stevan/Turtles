@@ -38,6 +38,13 @@ const KSHOW = (k : Kontinue) : string => {
     }
 }
 
+const KDUMP = (ctx : Context, queue : Kontinuation) => {
+    console.log('='.repeat(80));
+    console.log(` %ENV :`, DEBUG.DUMP(ctx.env));
+    console.log('QUEUE :', queue.map(KSHOW).join('; '));
+    console.log('-'.repeat(80));
+}
+
 const DEBUG_ON = false;
 
 export class Machine {
@@ -67,33 +74,34 @@ export class Machine {
 
             let operation = queue.pop() as Kontinue;
 
-            if (this.step(operation, this.cc.env, queue)) {
-                console.log('='.repeat(80));
-                console.log(` %ENV :`, DEBUG.DUMP(this.cc.env));
-                console.log('QUEUE :', queue.map(KSHOW).join('; '));
-                console.log('-'.repeat(80));
-            } else {
+            if (!this.step(operation, this.cc.env, queue)) {
                 if (operation.op != 'HALT') {
                     throw new Error('ONLY HALT!');
                 }
 
+                if (DEBUG_ON) {
                 console.log('!! HALT '+('_'.repeat(72)));
-                console.log(` %ENV :`, DEBUG.DUMP(this.cc.env));
-                console.log('QUEUE :', queue.map(KSHOW).join('; '));
                 console.log('  ^OP :', KSHOW(operation));
-                console.log('-'.repeat(80));
+                                   KDUMP(this.cc, queue);}
 
                 result = operation.stack.shift() as Types.Expr;
                 break;
             }
+
+            if (DEBUG_ON) { KDUMP(this.cc, queue);}
         }
 
         return result ?? AST.Nil();
     }
 
-    step (k : Kontinue, env : Env, queue : Kontinuation) : boolean {
+    returnK ( k : Kontinue ) : void {
         let caller = queue.at(-1) as Kontinue;
+        caller.stack.push( ...k.stack );
+    }
 
+    continueK ()
+
+    step (k : Kontinue, env : Env, queue : Kontinuation) : boolean {
         switch (k.op) {
         case 'EVAL':
             queue.push( this.evaluate( k.expr, env ) );
@@ -114,7 +122,7 @@ export class Machine {
             }
             return true;
         case 'JUST':
-            caller.stack.push( ...k.stack );
+            this.returnK( k );
             return true;
         case 'HALT':
             return false;
