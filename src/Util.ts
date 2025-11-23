@@ -34,6 +34,14 @@ export namespace List {
 }
 
 export namespace Type {
+    export function isNil  (v : any) : v is Types.Nil  { return v.type == 'NIL'  }
+    export function isCons (v : any) : v is Types.Cons { return v.type == 'CONS' }
+
+    export function isCallable (v : any) : v is Types.Callable {
+        return v.type == 'FEXPR' || v.type == 'NATIVE' || v.type == 'LAMBDA'
+    }
+
+
     export function assertSym (v : any) : asserts v is Types.Sym {
         if (v.type != 'SYM') throw new Error(`Expected Sym and got ${JSON.stringify(v)}`);
     }
@@ -45,10 +53,6 @@ export namespace Type {
 
     export function assertCallable (v : any) : asserts v is Types.Callable {
         if (!isCallable(v)) throw new Error(`Expected Callable and got ${JSON.stringify(v)}`);
-    }
-
-    export function isCallable (v : any) : v is Types.Callable {
-        return v.type == 'FEXPR' || v.type == 'NATIVE' || v.type == 'LAMBDA'
     }
 
     export function assertLiteral (v : any) : asserts v is Types.Literal {

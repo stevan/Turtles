@@ -14,7 +14,7 @@ export namespace DEBUG {
 
     export function DUMP (env : Env) : string {
         return `%E[${env.depth()}]{${ [ ...env.bindings.keys() ].map((e) => ("`" + e)).join(', ') }} `
-            + (env.parent == undefined ? '' : ` ^(${ DUMP(env.parent) })`)
+            + ((env.parent?.parent == undefined) ? '%E[_]' : ` ^(${ DUMP(env.parent) })`)
     }
 }
 

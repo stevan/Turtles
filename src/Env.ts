@@ -22,5 +22,5 @@ export class Env {
     }
 
     derive () : Env    { return new Env( this ) }
-    depth  () : number { return 1 + (this.parent?.depth() ?? 0) }
+    depth  () : number { return (this.parent?.depth() ?? -1) + 1 }
 }

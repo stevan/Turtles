@@ -62,8 +62,8 @@ export function format (expr : Types.Expr) : string {
     case 'CONS'   : return `(${ Util.List.flatten(expr).map(format).join(' ') })`;
     case 'SYM'    : return expr.ident;
     case 'LAMBDA' : return `(lambda ${format(expr.params)} ${format(expr.body)})`;
-    case 'NATIVE' : return `(native ${format(expr.params)} #:native)`;
-    case 'FEXPR'  : return `(fexpr ${format(expr.params)} @:fexpr)`;
+    case 'NATIVE' : return `(#:native ${format(expr.params)})`;
+    case 'FEXPR'  : return `(@:fexpr ${format(expr.params)})`;
     default:
         return 'XXX'
     }

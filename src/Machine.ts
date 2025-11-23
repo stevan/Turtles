@@ -18,7 +18,7 @@ type Call   = { op : 'CALL?', stack : Types.Expr[], args : Types.List }
 type Apply  = { op : 'APPLY', stack : Types.Expr[], call : Types.Callable }
 
 function Halt   ()                      : Halt  { return { op : 'HALT',  stack : [] } }
-function Just   (just : Types.Expr)     : Just  { return { op : 'JUST',  stack : [ just ] } }
+function Just   (...j : Types.Expr[])   : Just  { return { op : 'JUST',  stack : [ ...j ] } }
 function Eval   (expr : Types.Expr)     : Eval  { return { op : 'EVAL',  stack : [], expr } }
 function EHead  (cons : Types.Cons)     : EHead { return { op : 'EHEAD', stack : [], cons } }
 function Call   (args : Types.List)     : Call  { return { op : 'CALL?', stack : [], args } }
@@ -41,7 +41,7 @@ const KSHOW = (k : Kontinue) : string => {
 const KDUMP = (ctx : Context, queue : Kontinuation) => {
     console.log('-'.repeat(80));
     console.log(` %ENV :`, DEBUG.DUMP(ctx.env));
-    console.log('QUEUE :', queue.map(KSHOW).join('; '));
+    console.log('QUEUE :', queue.map(KSHOW).reverse().join('; '));
     console.log('='.repeat(80));
 }
 
@@ -82,7 +82,9 @@ export class Machine {
                 break;
             }
 
-            if (DEBUG_ON) KDUMP(this.cc, this.queue);
+            if (DEBUG_ON) {
+            KDUMP(this.cc, this.queue);
+            console.log('\n');}
         }
 
         return result ?? AST.Nil();
@@ -104,31 +106,37 @@ export class Machine {
 
         switch (k.op) {
         case 'EVAL':
-            this.continueK( this.evaluate( k.expr ) );
-            if (k.stack.length > 0) throw new Error("WRFD!!!");
-            return true;
+            this.continueK( this.evaluate( k.expr ), Just(...k.stack) );
+            break;
         case 'EHEAD':
             this.continueK( Call( k.cons.tail ), Eval( k.cons.head ) );
-            return true;
+            break;
         case 'APPLY':
             this.continueK( this.apply( k.call, k.stack ) );
-            return true;
+            break;
         case 'CALL?':
             let [ call ] = k.stack;
+
             if (Util.Type.isCallable(call)) {
-                this.continueK( Apply(call as Types.Callable), Eval(k.args) );
+                this.continueK( Apply(call) );
             } else {
-                this.continueK( Just(call as Types.Expr), Eval(k.args) );
+                this.continueK( Just(call as Types.Expr) );
             }
-            return true;
+
+            if (!Util.Type.isNil(k.args)) {
+                this.continueK( Eval(k.args) );
+            }
+            break;
         case 'JUST':
             this.returnK( k );
-            return true;
+            break;
         case 'HALT':
             return false;
         default:
             throw new Error(`Unrecognized K op (${JSON.stringify(k)}`);
         }
+
+        return true;
     }
 
 
