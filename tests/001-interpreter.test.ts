@@ -1,16 +1,30 @@
 
+import { test } from "node:test"
+import  assert  from "node:assert"
+
+import { DEBUG }       from '../src/Runtime'
+import   * as AST      from '../src/AST'
 import   * as Parser   from '../src/Parser'
 import { Interpreter } from '../src/Interpreter'
 
-let ast = Parser.parse(`((lambda (x y) (+ x y)) (+ 5 5) (* 2 10))`);
+test("... basic test", (t) => {
 
-//console.log(JSON.stringify(ast, null, 4));
-console.log(Parser.format(ast));
+    let ast = Parser.parse(`
+        ((lambda (x y) (+ x y)) (+ 5 5) (* 2 10))
 
-let i   = new Interpreter();
-let got = i.run( ast );
+    `);
 
-//console.log(JSON.stringify(got, null, 4));
-console.log(Parser.format(got));
+    console.log('>>>', DEBUG.SHOW(ast));
 
+    let i   = new Interpreter();
+    let got = i.run( ast );
 
+    console.log('<<<', DEBUG.SHOW(got));
+
+    assert.strictEqual(
+        JSON.stringify(got),
+        JSON.stringify(AST.Num(30)),
+        '... got the expected result'
+    );
+
+})
