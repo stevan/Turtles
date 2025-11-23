@@ -44,9 +44,8 @@ export type NumBinOp  = (lhs : number, rhs : number) => number
 export function liftPredicate (pred : Predicate) : Types.Native {
     return AST.Native(
         Util.List.make( AST.Sym('n'), AST.Sym('m') ),
-        (ctx : Context) : Types.Expr => {
-            let lhs = ctx.env.lookup(AST.Sym('n'));
-            let rhs = ctx.env.lookup(AST.Sym('m'));
+        (args : Types.Expr[], ctx : Context) : Types.Expr => {
+            let [ lhs, rhs ] = args;
             Util.Type.assertLiteral(lhs);
             Util.Type.assertLiteral(rhs);
             return pred(lhs.value, rhs.value) ? AST.True() : AST.False();
@@ -57,9 +56,8 @@ export function liftPredicate (pred : Predicate) : Types.Native {
 export function liftNumBinOp (binop : NumBinOp) : Types.Native {
     return AST.Native(
         Util.List.make( AST.Sym('n'), AST.Sym('m') ),
-        (ctx : Context) : Types.Expr => {
-            let lhs = ctx.env.lookup(AST.Sym('n'));
-            let rhs = ctx.env.lookup(AST.Sym('m'));
+        (args : Types.Expr[], ctx : Context) : Types.Expr => {
+            let [ lhs, rhs ] = args;
             Util.Type.assertNum(lhs);
             Util.Type.assertNum(rhs);
             return AST.Num( binop(lhs.value, rhs.value) );

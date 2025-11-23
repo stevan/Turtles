@@ -20,7 +20,12 @@ export class Interpreter {
     }
 
     run (expr : Types.Expr) : Types.Expr {
-        return this.evaluate(expr, this.context);
+        let result = this.context.evaluate(expr);
+
+        console.log(`HALT `, DEBUG.SHOW(result));
+        console.log(`%ENV `, DEBUG.DUMP(this.context.env));
+
+        return result;
     }
 
     evaluate (expr : Types.Expr, ctx : Context) : Types.Expr {
@@ -48,38 +53,37 @@ export class Interpreter {
     apply (call : Types.Callable, args : Types.List, ctx : Context) : Types.Expr {
         console.log(`APPLY ${DEBUG.SHOW(call)} -> `, DEBUG.SHOW(args));
 
-        const evalArgs = () => Util.List.flatten( ctx.evaluate( args ) as Types.List );
-        const bindArgs = () => {
-            let params = Util.List.flatten(call.params);
-            let args   = evalArgs();
-            for (let i = 0; i < params.length; i++) {
-                let param = params[i];
-                Util.Type.assertSym(param);
-                // FIXME ...
-                let arg = args[i] as Types.Expr;
-                ctx.env.assign( param, arg );
-            }
-            return ctx;
-        }
-
-        ctx.enterScope();
-
         let result;
-        switch (call.type) {
-        case 'FEXPR':
+        if (call.type == 'FEXPR') {
             result = call.body( Util.List.flatten( args ), ctx );
-            break;
-        case 'NATIVE':
-            result = call.body( bindArgs() );
-            break;
-        case 'LAMBDA':
-            result = this.evaluate( call.body, bindArgs() );
-            break;
-        default:
-            throw new Error(`Unknown Callable Type`);
-        }
+        } else {
+            let evaluatedArgs = Util.List.flatten( ctx.evaluate( args ) as Types.List );
 
-        ctx.leaveScope();
+            switch (call.type) {
+            case 'NATIVE':
+                result = call.body( evaluatedArgs, ctx );
+                break;
+            case 'LAMBDA':
+                // enter new scope
+                call.ctx.enterScope();
+
+                let params = Util.List.flatten( call.params );
+                for (let i = 0; i < params.length; i++) {
+                    let param = params[i];
+                    Util.Type.assertSym(param);
+                    // FIXME ...
+                    let arg = evaluatedArgs[i] as Types.Expr;
+                    call.ctx.env.assign( param, arg );
+                }
+                // evalute lambda in new scope
+                result = call.ctx.evaluate( call.body );
+                // leave scope
+                call.ctx.leaveScope();
+                break;
+            default:
+                throw new Error(`Unknown Callable Type`);
+            }
+        }
 
         return result;
     }

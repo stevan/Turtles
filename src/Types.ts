@@ -22,7 +22,7 @@ export type Sym = { type : 'SYM', ident : string }
 
 // Callables
 
-export type NativeFunc  = ( ctx : Context ) => Expr
+export type NativeFunc  = ( args : Expr[], ctx : Context ) => Expr
 export type NativeFExpr = ( args : Expr[], ctx : Context ) => Expr
 
 export type Native = { type : 'NATIVE', params : List, body : NativeFunc  }
