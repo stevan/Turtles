@@ -27,14 +27,14 @@ function Apply  (call : Types.Callable) : Apply { return { op : 'APPLY', stack :
 type Kontinue     = Halt | Just | Eval | EHead| Call | Apply
 type Kontinuation = Kontinue[];
 
-DEBUG.SHOWK = (k : Kontinue) : string => {
+const KSHOW = (k : Kontinue) : string => {
     switch (k.op) {
     case 'HALT'  : return `${k.op}()[${k.stack.map(DEBUG.SHOW).join(', ')}]`
     case 'JUST'  : return `${k.op}()[${k.stack.map(DEBUG.SHOW).join(', ')}]`
-    case 'EVAL'  : return `${k.op}<${DEBUG.SHOW(k.expr)}>[${k.stack.map(DEBUG.SHOW).join(', ')}]`
-    case 'EHEAD' : return `${k.op}<${DEBUG.SHOW(k.cons)}>[${k.stack.map(DEBUG.SHOW).join(', ')}]`
-    case 'CALL?' : return `${k.op}<${DEBUG.SHOW(k.args)}>[${k.stack.map(DEBUG.SHOW).join(', ')}]`
-    case 'APPLY' : return `${k.op}<${DEBUG.SHOW(k.call)}>[${k.stack.map(DEBUG.SHOW).join(', ')}]`
+    case 'EVAL'  : return `${k.op}{${DEBUG.SHOW(k.expr)}}:[${k.stack.map(DEBUG.SHOW).join(', ')}]`
+    case 'EHEAD' : return `${k.op}{${DEBUG.SHOW(k.cons)}}:[${k.stack.map(DEBUG.SHOW).join(', ')}]`
+    case 'CALL?' : return `${k.op}{${DEBUG.SHOW(k.args)}}:[${k.stack.map(DEBUG.SHOW).join(', ')}]`
+    case 'APPLY' : return `${k.op}{${DEBUG.SHOW(k.call)}}:[${k.stack.map(DEBUG.SHOW).join(', ')}]`
     }
 }
 
@@ -70,9 +70,7 @@ export class Machine {
             if (this.step(operation, this.cc.env, queue)) {
                 console.log('='.repeat(80));
                 console.log(` %ENV :`, DEBUG.DUMP(this.cc.env));
-                console.log('QUEUE :', queue.map((k) => `${k.op}[${
-                    k.stack.map(DEBUG.SHOW).join(', ')
-                }]`).join('; '));
+                console.log('QUEUE :', queue.map(KSHOW).join('; '));
                 console.log('-'.repeat(80));
             } else {
                 if (operation.op != 'HALT') {
@@ -81,9 +79,8 @@ export class Machine {
 
                 console.log('!! HALT '+('_'.repeat(72)));
                 console.log(` %ENV :`, DEBUG.DUMP(this.cc.env));
-                console.log('QUEUE :', queue.map((k) => `${k.op}[${
-                    k.stack.map(DEBUG.SHOW).join(', ')
-                }]`).join('; '));
+                console.log('QUEUE :', queue.map(KSHOW).join('; '));
+                console.log('  ^OP :', KSHOW(operation));
                 console.log('-'.repeat(80));
 
                 result = operation.stack.shift() as Types.Expr;
