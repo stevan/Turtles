@@ -2,17 +2,17 @@
 import type * as Types from './Types'
 import type { Env } from './Env'
 
-export type Evaluator = (expr : Types.Expr, ctx : Context) => Types.Expr
+export type Evaluator = (expr : Types.Expr) => Types.Expr
 
 export class Context {
     public scope : Env[]        = [];
     public stack : Types.Expr[] = [];
 
-    public evaluator : Evaluator;
+    public evaluate : Evaluator;
 
     constructor(env : Env, evaluator : Evaluator) {
         this.scope.push(env);
-        this.evaluator = evaluator;
+        this.evaluate = evaluator;
     }
 
     get env () : Env {
@@ -28,9 +28,5 @@ export class Context {
 
     leaveScope () : void {
         this.scope.pop();
-    }
-
-    evaluate (expr : Types.Expr) : Types.Expr {
-        return this.evaluator(expr, this);
     }
 }

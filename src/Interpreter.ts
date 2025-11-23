@@ -13,51 +13,50 @@ import {
 export class Interpreter {
     public rootEnv : Env;
     public rootCtx : Context;
-
-    public contextStack : Context[] = [];
+    public stack   : Context[] = [];
 
     constructor (env? : MaybeEnv) {
         this.rootEnv = env ?? this.createRootEnvironment();
-        this.rootCtx = new Context(this.rootEnv, (expr, env) => this.evaluate(expr, env));
-        this.contextStack.push(this.rootCtx);
+        this.rootCtx = new Context(this.rootEnv, (expr) => this.evaluate(expr));
+        this.stack.push(this.rootCtx);
     }
 
-    get currentContext () : Context {
-        return this.contextStack.at(-1) as Context;
-    }
-
-    enterContext (ctx : Context) : void {
-        this.contextStack.push(ctx);
-    }
-
-    leaveContext () : void {
-        this.contextStack.pop();
+    // c(urrent)c(ontext)
+    get cc () : Context {
+        return this.stack.at(-1) as Context;
     }
 
     run (expr : Types.Expr) : Types.Expr {
-        let result = this.currentContext.evaluate(expr);
+        let result = this.cc.evaluate(expr);
 
         console.log(`HALT `, DEBUG.SHOW(result));
-        console.log(`%ENV `, DEBUG.DUMP(this.currentContext.env));
+        console.log(`%ENV `, DEBUG.DUMP(this.cc.env));
 
         return result;
     }
 
-    evaluate (expr : Types.Expr, ctx : Context) : Types.Expr {
-        console.log(`%ENV `, DEBUG.DUMP(ctx.env));
+    // IDEA:
+    // stop passing around the ctx, and use the context
+    // instead. It is already there, and we do not really
+    // gain any advantage from passing. Meanwhile we can
+    // better manage them if we always know where they come
+    // from.
+
+    evaluate (expr : Types.Expr) : Types.Expr {
+        console.log(`%ENV `, DEBUG.DUMP(this.cc.env));
         console.log(`EVAL (${expr.type})`, DEBUG.SHOW(expr));
         switch (expr.type) {
         case 'NUM'   :
         case 'STR'   :
         case 'BOOL'  : return expr;
-        case 'SYM'   : return ctx.env.lookup(expr);
+        case 'SYM'   : return this.cc.env.lookup(expr);
         case 'NIL'   : return expr;
         case 'CONS'  :
-            let head = ctx.evaluate(expr.head);
+            let head = this.cc.evaluate(expr.head);
             if (Util.Type.isCallable(head)) {
-                return this.apply( head, expr.tail, ctx );
+                return this.apply( head, expr.tail );
             } else {
-                return AST.Cons( head, ctx.evaluate(expr.tail) as Types.List );
+                return AST.Cons( head, this.cc.evaluate(expr.tail) as Types.List );
             }
         default:
             throw new Error('WTF!');
@@ -65,45 +64,52 @@ export class Interpreter {
     }
 
     // apply a function, builtin or fexpr
-    apply (call : Types.Callable, args : Types.List, ctx : Context) : Types.Expr {
+    apply (call : Types.Callable, args : Types.List) : Types.Expr {
         console.log(`APPLY ${DEBUG.SHOW(call)} -> `, DEBUG.SHOW(args));
 
-        let result;
-        if (call.type == 'FEXPR') {
-            result = call.body( Util.List.flatten( args ), ctx );
-        } else {
-            let evaluatedArgs = Util.List.flatten( ctx.evaluate( args ) as Types.List );
+        const evaluateArgs = () : Types.List => this.cc.evaluate( args ) as Types.List;
 
-            switch (call.type) {
-            case 'NATIVE':
-                result = call.body( evaluatedArgs, ctx );
-                break;
-            case 'LAMBDA':
-                // ...
-                this.enterContext( call.ctx );
-                // enter new scope
-                call.ctx.enterScope();
-                // ...
-                let params = Util.List.flatten( call.params );
-                for (let i = 0; i < params.length; i++) {
-                    let param = params[i];
-                    Util.Type.assertSym(param);
-                    // FIXME ...
-                    let arg = evaluatedArgs[i] as Types.Expr;
-                    call.ctx.env.assign( param, arg );
-                }
-                // evalute lambda in new scope
-                result = call.ctx.evaluate( call.body );
-                // leave scope
-                call.ctx.leaveScope();
-                // ...
-                this.leaveContext();
-                break;
-            default:
-                throw new Error(`Unknown Callable Type`);
-            }
+        switch (call.type) {
+        case 'FEXPR':
+            return call.body( Util.List.flatten( args ), this.cc );
+        case 'NATIVE':
+            return call.body( Util.List.flatten( evaluateArgs() ), this.cc );
+        case 'LAMBDA':
+            return this.callLambda( call, evaluateArgs() );
+        default:
+            throw new Error(`Unknown Callable Type`);
         }
+    }
 
+    enterContext (ctx : Context) : void {
+        this.stack.push(ctx);
+    }
+
+    leaveContext () : void {
+        this.stack.pop();
+    }
+
+    callLambda (call : Types.Lambda, args : Types.List) : Types.Expr {
+        this.enterContext( call.ctx );
+        // enter new scope
+        this.cc.enterScope();
+        // ...
+        let flatArgs = Util.List.flatten( args );
+        let params   = Util.List.flatten( call.params );
+        for (let i = 0; i < params.length; i++) {
+            let param = params[i];
+            Util.Type.assertSym(param);
+            // FIXME ...
+            let arg = flatArgs[i] as Types.Expr;
+            this.cc.env.assign( param, arg );
+        }
+        // evalute lambda in new scope
+        let result = this.cc.evaluate( call.body );
+        // leave scope
+        this.cc.leaveScope();
+        // ...
+        this.leaveContext();
+        // return ...
         return result;
     }
 
