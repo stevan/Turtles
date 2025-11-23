@@ -12,18 +12,33 @@ import {
 
 export class Interpreter {
     public rootEnv : Env;
-    public context : Context;
+    public rootCtx : Context;
+
+    public contextStack : Context[] = [];
 
     constructor (env? : MaybeEnv) {
         this.rootEnv = env ?? this.createRootEnvironment();
-        this.context = new Context(this.rootEnv, (expr, env) => this.evaluate(expr, env));
+        this.rootCtx = new Context(this.rootEnv, (expr, env) => this.evaluate(expr, env));
+        this.contextStack.push(this.rootCtx);
+    }
+
+    get currentContext () : Context {
+        return this.contextStack.at(-1) as Context;
+    }
+
+    enterContext (ctx : Context) : void {
+        this.contextStack.push(ctx);
+    }
+
+    leaveContext () : void {
+        this.contextStack.pop();
     }
 
     run (expr : Types.Expr) : Types.Expr {
-        let result = this.context.evaluate(expr);
+        let result = this.currentContext.evaluate(expr);
 
         console.log(`HALT `, DEBUG.SHOW(result));
-        console.log(`%ENV `, DEBUG.DUMP(this.context.env));
+        console.log(`%ENV `, DEBUG.DUMP(this.currentContext.env));
 
         return result;
     }
@@ -64,9 +79,11 @@ export class Interpreter {
                 result = call.body( evaluatedArgs, ctx );
                 break;
             case 'LAMBDA':
+                // ...
+                this.enterContext( call.ctx );
                 // enter new scope
                 call.ctx.enterScope();
-
+                // ...
                 let params = Util.List.flatten( call.params );
                 for (let i = 0; i < params.length; i++) {
                     let param = params[i];
@@ -79,6 +96,8 @@ export class Interpreter {
                 result = call.ctx.evaluate( call.body );
                 // leave scope
                 call.ctx.leaveScope();
+                // ...
+                this.leaveContext();
                 break;
             default:
                 throw new Error(`Unknown Callable Type`);
