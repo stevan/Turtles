@@ -3,54 +3,80 @@ import * as Types from './Types'
 import * as AST   from './AST'
 import * as Util  from './Util'
 
+import { Context }       from './Context'
 import { Env, MaybeEnv } from './Env'
 import {
     DEBUG,
     createBaseEnvironment
 } from './Runtime'
 
-export type Operation = [ string, Types.Expr[] ]
+type Halt   = { op : 'HALT',  stack : Types.Expr[] }
+type Just   = { op : 'JUST',  stack : Types.Expr[] }
+type Eval   = { op : 'EVAL',  stack : Types.Expr[], expr : Types.Expr }
+type EHead  = { op : 'EHEAD', stack : Types.Expr[], cons : Types.Cons }
+type Call   = { op : 'CALL?', stack : Types.Expr[], args : Types.List }
+type Apply  = { op : 'APPLY', stack : Types.Expr[], call : Types.Callable }
+
+function Halt   ()                      : Halt  { return { op : 'HALT',  stack : [] } }
+function Just   (just : Types.Expr)     : Just  { return { op : 'JUST',  stack : [ just ] } }
+function Eval   (expr : Types.Expr)     : Eval  { return { op : 'EVAL',  stack : [], expr } }
+function EHead  (cons : Types.Cons)     : EHead { return { op : 'EHEAD', stack : [], cons } }
+function Call   (args : Types.List)     : Call  { return { op : 'CALL?', stack : [], args } }
+function Apply  (call : Types.Callable) : Apply { return { op : 'APPLY', stack : [], call } }
+
+type Kontinue = Halt | Just | Eval | EHead| Call | Apply
+
+type Kontinuation = Kontinue[];
+
+const DEBUG_ON = false;
 
 export class Machine {
-    public env : Env;
+    public rootEnv : Env;
+    public rootCtx : Context;
+    public stack   : Context[] = [];
 
     constructor (env? : MaybeEnv) {
-        this.env = env ?? this.createRootEnvironment()
+        this.rootEnv = env ?? this.createRootEnvironment();
+        this.rootCtx = new Context(this.rootEnv, (expr) => this.run(expr));
+        this.stack.push(this.rootCtx);
+    }
+
+    // c(urrent)c(ontext)
+    get cc () : Context {
+        return this.stack.at(-1) as Context;
     }
 
     run (expr : Types.Expr) : Types.Expr {
 
-        let queue : Operation[] = [
-            [ 'HALT', [] ],
-            [ 'EVAL', [ expr ] ]
-        ];
+        let queue : Kontinuation = [ Halt(), Eval(expr) ];
 
         let result;
 
         while (queue.length > 0) {
             console.log('__ TICK '+('_'.repeat(72)));
 
-            let operation = queue.pop() as Operation;
+            let operation = queue.pop() as Kontinue;
 
-            if (this.step(operation, this.env, queue)) {
+            if (this.step(operation, this.cc.env, queue)) {
                 console.log('='.repeat(80));
-                console.log(` %ENV :`, DEBUG.DUMP(this.env));
-                console.log('QUEUE :', queue.map(([op, args]) => `${op}[${
-                    args.map(DEBUG.SHOW).join(', ')
+                console.log(` %ENV :`, DEBUG.DUMP(this.cc.env));
+                console.log('QUEUE :', queue.map((k) => `${k.op}[${
+                    k.stack.map(DEBUG.SHOW).join(', ')
                 }]`).join('; '));
                 console.log('-'.repeat(80));
             } else {
-                let [ op, exprs ] = operation;
+                if (operation.op != 'HALT') {
+                    throw new Error('ONLY HALT!');
+                }
 
                 console.log('!! HALT '+('_'.repeat(72)));
-                console.log(` %ENV :`, DEBUG.DUMP(this.env));
-                console.log('QUEUE :', queue.map(([op, args]) => `${op}[${
-                    args.map(DEBUG.SHOW).join(', ')
+                console.log(` %ENV :`, DEBUG.DUMP(this.cc.env));
+                console.log('QUEUE :', queue.map((k) => `${k.op}[${
+                    k.stack.map(DEBUG.SHOW).join(', ')
                 }]`).join('; '));
-                console.log('^OPER :', `${op}[${exprs.map(DEBUG.SHOW).join(', ')}]`);
                 console.log('-'.repeat(80));
 
-                result = exprs.shift() as Types.Expr;
+                result = operation.stack.shift() as Types.Expr;
                 break;
             }
         }
@@ -58,72 +84,54 @@ export class Machine {
         return result ?? AST.Nil();
     }
 
-    step (operation : Operation, env : Env, queue : Operation[]) : boolean {
-        let [ op, exprs ] = operation;
+    step (k : Kontinue, env : Env, queue : Kontinuation) : boolean {
+        let caller = queue.at(-1) as Kontinue;
 
-        let caller = queue.at(-1) as Operation;
-
-        switch (op) {
+        switch (k.op) {
         case 'EVAL':
-            let [ expr, ...rest ] = exprs;
-            queue.push( this.evaluate( expr as Types.Expr, env ) );
-            if (rest.length > 0) queue.push([ 'JUST', rest ])
+            queue.push( this.evaluate( k.expr, env ) );
+            //if (k.stack.length > 0) queue.push(Just(rest));
             return true;
         case 'EHEAD':
-            let cons = exprs.at(0) as Types.Cons;
-            queue.push(
-                [ 'CALL?', [ cons.tail ] ],
-                [ 'EVAL',  [ cons.head ] ],
-            );
+            queue.push( Call( k.cons.tail ), Eval( k.cons.head ) );
             return true;
         case 'APPLY':
-            let [ callable, ...evaledArgs ] = exprs;
-            queue.push( this.apply( callable as Types.Callable, evaledArgs, env ) );
+            queue.push( this.apply( k.call, k.stack, env ) );
             return true;
         case 'CALL?':
-            let [ args, call ] = exprs;
+            let [ call ] = k.stack;
             if (Util.Type.isCallable(call)) {
-                queue.push(
-                    [ 'APPLY', [ call as Types.Callable ] ],
-                    [ 'EVAL',  [ args as Types.Expr ] ],
-                );
+                queue.push( Apply(call as Types.Callable), Eval(k.args) );
             } else {
-                queue.push(
-                    [ 'JUST', [ call as Types.Expr ] ],
-                    [ 'EVAL', [ args as Types.Expr ] ],
-                );
+                queue.push( Just(call as Types.Expr), Eval(k.args) );
             }
             return true;
         case 'JUST':
-            caller[1].push( ...exprs );
+            caller.stack.push( ...k.stack );
             return true;
         case 'HALT':
             return false;
         default:
-            throw new Error(`Unrecognized op (${op}`);
+            throw new Error(`Unrecognized K op (${JSON.stringify(k)}`);
         }
     }
 
 
-    evaluate (expr : Types.Expr, env : Env) : Operation {
+    evaluate (expr : Types.Expr, env : Env) : Kontinue {
         console.log(`>> EVAL [${expr.type}]`, DEBUG.SHOW(expr));
         switch (expr.type) {
         case 'NUM'   :
         case 'STR'   :
-        case 'BOOL'  :
-            return [ 'JUST', [ expr ] ];
-        case 'SYM'   :
-            return [ 'JUST', [ env.lookup(expr) ] ];
-        case 'CONS'  :
-            return [ 'EHEAD', [ expr ] ]
-        case 'NIL'   :
-            return [ 'JUST', [ expr ] ]
+        case 'BOOL'  : return Just(expr);
+        case 'SYM'   : return Just(env.lookup(expr));
+        case 'CONS'  : return EHead(expr)
+        case 'NIL'   : return Just(expr)
         default:
             throw new Error('FUCK!');
         }
     }
 
-    apply (call : Types.Callable, args : Types.Expr[], env : Env) : Operation {
+    apply (call : Types.Callable, args : Types.Expr[], env : Env) : Kontinue {
         console.log(`>> APPLY ${DEBUG.SHOW(call)} -> `, args.map(DEBUG.SHOW));
 
         const makeLocalEnv = () => {
@@ -142,11 +150,11 @@ export class Machine {
 
         switch (call.type) {
         case 'FEXPR':
-            return [ 'EVAL', [ call.body( args, env ) ] ];
+            return Eval(call.body( args, this.cc ));
         case 'NATIVE':
-            return [ 'JUST', [ call.body( makeLocalEnv() ) ] ];
+            return Just(call.body( args, this.cc ));
         case 'LAMBDA':
-            return [ 'CALL', [ call.body ] ]; // BROKEN!
+            return Eval(call.body); // BROKEN!
         default:
             throw new Error(`Unknown Callable Type`);
         }

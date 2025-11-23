@@ -38,17 +38,11 @@ export class Interpreter {
         return result;
     }
 
-    // IDEA:
-    // stop passing around the ctx, and use the context
-    // instead. It is already there, and we do not really
-    // gain any advantage from passing. Meanwhile we can
-    // better manage them if we always know where they come
-    // from.
-
     evaluate (expr : Types.Expr) : Types.Expr {
         if (DEBUG_ON) {
         console.log(`%ENV `, DEBUG.DUMP(this.cc.env));
         console.log(`EVAL (${expr.type})`, DEBUG.SHOW(expr));}
+
         switch (expr.type) {
         case 'NUM'   :
         case 'STR'   :
