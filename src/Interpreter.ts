@@ -82,16 +82,16 @@ export class Interpreter {
 
     enterContext (ctx : Context) : void {
         this.stack.push(ctx);
+        this.cc.enterScope();
     }
 
     leaveContext () : void {
+        this.cc.leaveScope();
         this.stack.pop();
     }
 
     callLambda (call : Types.Lambda, args : Types.List) : Types.Expr {
         this.enterContext( call.ctx );
-        // enter new scope
-        this.cc.enterScope();
         // ...
         let flatArgs = Util.List.flatten( args );
         let params   = Util.List.flatten( call.params );
@@ -104,8 +104,6 @@ export class Interpreter {
         }
         // evalute lambda in new scope
         let result = this.cc.evaluate( call.body );
-        // leave scope
-        this.cc.leaveScope();
         // ...
         this.leaveContext();
         // return ...

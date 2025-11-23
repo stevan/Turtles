@@ -16,25 +16,36 @@ type Eval   = { op : 'EVAL',  stack : Types.Expr[], expr : Types.Expr }
 type EHead  = { op : 'EHEAD', stack : Types.Expr[], cons : Types.Cons }
 type Call   = { op : 'CALL?', stack : Types.Expr[], args : Types.List }
 type Apply  = { op : 'APPLY', stack : Types.Expr[], call : Types.Callable }
+type Enter  = { op : 'ECTX',  stack : Types.Expr[], call : Types.Lambda }
+type Bind   = { op : 'BIND',  stack : Types.Expr[], params : Types.List }
+type Leave  = { op : 'LCTX',  stack : Types.Expr[] }
 
-function Halt   ()                      : Halt  { return { op : 'HALT',  stack : [] } }
-function Just   (...j : Types.Expr[])   : Just  { return { op : 'JUST',  stack : [ ...j ] } }
 function Eval   (expr : Types.Expr)     : Eval  { return { op : 'EVAL',  stack : [], expr } }
 function EHead  (cons : Types.Cons)     : EHead { return { op : 'EHEAD', stack : [], cons } }
 function Call   (args : Types.List)     : Call  { return { op : 'CALL?', stack : [], args } }
 function Apply  (call : Types.Callable) : Apply { return { op : 'APPLY', stack : [], call } }
+function Just   (...j : Types.Expr[])   : Just  { return { op : 'JUST',  stack : [ ...j ] } }
+function Halt   ()                      : Halt  { return { op : 'HALT',  stack : [] } }
+function Leave  ()                      : Leave { return { op : 'LCTX',  stack : [] } }
+function Enter  (call : Types.Lambda)   : Enter { return { op : 'ECTX',  stack : [], call } }
+function Bind   (params : Types.List, args : Types.Expr[]) : Bind  {
+    return { op : 'BIND', stack : [ ...args ], params }
+}
 
-type Kontinue     = Halt | Just | Eval | EHead| Call | Apply
+type Kontinue     = Halt | Just | Eval | EHead| Call | Apply | Enter | Leave | Bind
 type Kontinuation = Kontinue[];
 
 const KSHOW = (k : Kontinue) : string => {
     switch (k.op) {
-    case 'HALT'  : return `${k.op}()[${k.stack.map(DEBUG.SHOW).join(', ')}]`
-    case 'JUST'  : return `${k.op}()[${k.stack.map(DEBUG.SHOW).join(', ')}]`
+    case 'HALT'  : return `${k.op}:[${k.stack.map(DEBUG.SHOW).join(', ')}]`
+    case 'JUST'  : return `${k.op}:[${k.stack.map(DEBUG.SHOW).join(', ')}]`
     case 'EVAL'  : return `${k.op}{${DEBUG.SHOW(k.expr)}}:[${k.stack.map(DEBUG.SHOW).join(', ')}]`
     case 'EHEAD' : return `${k.op}{${DEBUG.SHOW(k.cons)}}:[${k.stack.map(DEBUG.SHOW).join(', ')}]`
     case 'CALL?' : return `${k.op}{${DEBUG.SHOW(k.args)}}:[${k.stack.map(DEBUG.SHOW).join(', ')}]`
     case 'APPLY' : return `${k.op}{${DEBUG.SHOW(k.call)}}:[${k.stack.map(DEBUG.SHOW).join(', ')}]`
+    case 'ECTX'  : return `${k.op}{${DEBUG.SHOW(k.call)}}:[${k.stack.map(DEBUG.SHOW).join(', ')}]`
+    case 'BIND'  : return `${k.op}{${DEBUG.SHOW(k.params)}}:[${k.stack.map(DEBUG.SHOW).join(', ')}]`
+    case 'LCTX'  : return `${k.op}:[${k.stack.map(DEBUG.SHOW).join(', ')}]`
     }
 }
 
@@ -111,7 +122,7 @@ export class Machine {
             this.continueK( Call( k.cons.tail ), Eval( k.cons.head ) );
             break;
         case 'APPLY':
-            this.continueK( this.apply( k.call, k.stack ) );
+            this.continueK( ...this.apply( k.call, k.stack ) );
             break;
         case 'CALL?':
             let [ call ] = k.stack;
@@ -133,6 +144,16 @@ export class Machine {
                 if (Util.Type.isNil(k.args)) break;
                 this.continueK( Eval(k.args) );
             }
+            break;
+        case 'ECTX':
+            this.enterContext( k.call.ctx )
+            break;
+        case 'BIND':
+            this.bindParams( k.params, k.stack );
+            break;
+        case 'LCTX':
+            this.leaveContext()
+            this.returnK( k );
             break;
         case 'JUST':
             this.returnK( k );
@@ -162,32 +183,43 @@ export class Machine {
         }
     }
 
-    apply (call : Types.Callable, args : Types.Expr[]) : Kontinue {
+    apply (call : Types.Callable, args : Types.Expr[]) : Kontinuation {
         console.log(`>> APPLY ${DEBUG.SHOW(call)} -> `, args.map(DEBUG.SHOW));
-
-        const makeLocalEnv = () => {
-            let params = Util.List.flatten(call.params);
-            let localE = this.cc.env.derive();
-            for (let i = 0; i < params.length; i++) {
-                let param = params[i];
-                let arg   = args[i];
-                Util.Type.assertSym(param);
-                if (arg == undefined) throw new Error('BAD ARG!');
-                localE.assign( param, arg as Types.Expr );
-            }
-            console.log(`(local) %ENV :`, DEBUG.DUMP(localE));
-            return localE;
-        }
-
         switch (call.type) {
         case 'FEXPR':
-            return Eval(call.body( Util.List.flatten(args[0] as Types.List), this.cc ));
+            return [ Eval(call.body( Util.List.flatten(args[0] as Types.List), this.cc )) ];
         case 'NATIVE':
-            return Just(call.body( args, this.cc ));
+            return [ Just(call.body( args, this.cc )) ];
         case 'LAMBDA':
-            return Eval(call.body); // BROKEN!
+            return [
+                Leave(),
+                Eval( call.body ),
+                Bind( call.params, args ),
+                Enter( call ),
+            ];
         default:
             throw new Error(`Unknown Callable Type`);
+        }
+    }
+
+    enterContext (ctx : Context) : void {
+        this.stack.push(ctx);
+        this.cc.enterScope();
+    }
+
+    leaveContext () : void {
+        this.cc.leaveScope();
+        this.stack.pop();
+    }
+
+    bindParams (params : Types.List, args : Types.Expr[]) : void {
+        let flatParams = Util.List.flatten( params );
+        for (let i = 0; i < flatParams.length; i++) {
+            let param = flatParams[i];
+            Util.Type.assertSym(param);
+            // FIXME ...
+            let arg = args[i] as Types.Expr;
+            this.cc.env.assign( param, arg );
         }
     }
 
