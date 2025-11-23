@@ -39,13 +39,13 @@ const KSHOW = (k : Kontinue) : string => {
 }
 
 const KDUMP = (ctx : Context, queue : Kontinuation) => {
-    console.log('='.repeat(80));
+    console.log('-'.repeat(80));
     console.log(` %ENV :`, DEBUG.DUMP(ctx.env));
     console.log('QUEUE :', queue.map(KSHOW).join('; '));
-    console.log('-'.repeat(80));
+    console.log('='.repeat(80));
 }
 
-const DEBUG_ON = false;
+const DEBUG_ON = true;
 
 export class Machine {
     public rootEnv : Env;
@@ -54,7 +54,7 @@ export class Machine {
 
     constructor (env? : MaybeEnv) {
         this.rootEnv = env ?? this.createRootEnvironment();
-        this.rootCtx = new Context(this.rootEnv, (expr) => this.run(expr));
+        this.rootCtx = new Context(this.rootEnv.derive(), (expr) => this.run(expr));
         this.stack.push(this.rootCtx);
     }
 
@@ -70,38 +70,38 @@ export class Machine {
         let result;
 
         while (queue.length > 0) {
-            console.log('__ TICK '+('_'.repeat(72)));
-
             let operation = queue.pop() as Kontinue;
 
             if (!this.step(operation, this.cc.env, queue)) {
-                if (operation.op != 'HALT') {
-                    throw new Error('ONLY HALT!');
-                }
-
+                if (operation.op != 'HALT') throw new Error('ONLY HALT!');
                 if (DEBUG_ON) {
                 console.log('!! HALT '+('_'.repeat(72)));
-                console.log('  ^OP :', KSHOW(operation));
                                    KDUMP(this.cc, queue);}
 
                 result = operation.stack.shift() as Types.Expr;
                 break;
             }
 
-            if (DEBUG_ON) { KDUMP(this.cc, queue);}
+            if (DEBUG_ON) KDUMP(this.cc, queue);
         }
 
         return result ?? AST.Nil();
     }
 
-    returnK ( k : Kontinue ) : void {
+    returnK ( k : Kontinue, queue : Kontinuation ) : void {
         let caller = queue.at(-1) as Kontinue;
         caller.stack.push( ...k.stack );
     }
 
-    continueK ()
+    continueK ( queue : Kontinuation, next : Kontinuation ) : void {
+        queue.push( ...next );
+    }
 
     step (k : Kontinue, env : Env, queue : Kontinuation) : boolean {
+        if (DEBUG_ON) {
+        console.log('^ STEP :', KSHOW(k));
+        console.log('.'.repeat(80));}
+
         switch (k.op) {
         case 'EVAL':
             queue.push( this.evaluate( k.expr, env ) );
@@ -122,7 +122,7 @@ export class Machine {
             }
             return true;
         case 'JUST':
-            this.returnK( k );
+            this.returnK( k, queue );
             return true;
         case 'HALT':
             return false;

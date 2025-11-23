@@ -19,7 +19,7 @@ export class Interpreter {
 
     constructor (env? : MaybeEnv) {
         this.rootEnv = env ?? this.createRootEnvironment();
-        this.rootCtx = new Context(this.rootEnv, (expr) => this.evaluate(expr));
+        this.rootCtx = new Context(this.rootEnv.derive(), (expr) => this.evaluate(expr));
         this.stack.push(this.rootCtx);
     }
 
