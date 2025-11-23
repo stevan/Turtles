@@ -74,8 +74,8 @@ export class Machine {
 
             if (!this.step(k)) {
                 if (DEBUG_ON) {
-                console.log('!! HALT '+('_'.repeat(72)));
-                                   KDUMP(this.cc, this.queue);}
+                console.log('!! HALT ' + KSHOW(k));
+                KDUMP(this.cc, this.queue);}
 
                 result = k.stack.shift() as Types.Expr;
                 break;
