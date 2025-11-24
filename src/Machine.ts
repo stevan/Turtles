@@ -51,8 +51,9 @@ const KSHOW = (k : Kontinue) : string => {
 
 const KDUMP = (ctx : Context, queue : Kontinuation) => {
     console.log('-'.repeat(80));
+    console.log('QUEUE :\n  -', queue.map(KSHOW).reverse().join(';\n  - '));
+    console.log('-'.repeat(80));
     console.log(` %ENV :`, DEBUG.DUMP(ctx.env));
-    console.log('QUEUE :', queue.map(KSHOW).reverse().join('; '));
     console.log('='.repeat(80));
 }
 
@@ -63,6 +64,8 @@ export class Machine {
     public rootCtx : Context;
     public stack   : Context[]    = [];
     public queue   : Kontinuation = [];
+
+    public step_count : number = 0;
 
     constructor (env? : MaybeEnv) {
         this.rootEnv = env ?? this.createRootEnvironment();
@@ -77,20 +80,27 @@ export class Machine {
     }
 
     run (expr : Types.Expr) : Types.Expr {
+        if (DEBUG_ON) {
+            console.log('~~   RUN :', DEBUG.SHOW(expr));
+            console.log(':'.repeat(80));}
+
         this.queue.push( Eval(expr) );
 
-        let result;
+        let result : Types.Expr = AST.Nil();
         while (this.queue.length > 0) {
             let k = this.queue.pop() as Kontinue;
             if (!this.step(k)) {
-                if (DEBUG_ON) console.log('!!  HALT :' + KSHOW(k));
                 result = k.stack.shift() as Types.Expr;
                 break;
             }
             if (DEBUG_ON) KDUMP(this.cc, this.queue);
         }
 
-        return result ?? AST.Nil();
+        if (DEBUG_ON) {
+            console.log('!!  HALT :' + DEBUG.SHOW(result));
+            console.log(':'.repeat(80));}
+
+        return result;
     }
 
     returnK (k : Kontinue) : void {
@@ -103,7 +113,13 @@ export class Machine {
     }
 
     step (k : Kontinue) : boolean {
-        if (DEBUG_ON) console.log('^^  STEP :', KSHOW(k));
+        this.step_count++;
+        if (DEBUG_ON) {
+            console.log('-'.repeat(80));
+            console.group('^STEP.'+(this.step_count).toString().padStart(3, '0')+':');
+            console.log('-'.repeat(78));
+            console.log('...', KSHOW(k));
+            console.log('-'.repeat(78));}
 
         switch (k.op) {
         case 'EVAL':
@@ -149,11 +165,13 @@ export class Machine {
             this.returnK( k );
             break;
         case 'HALT':
+            if (DEBUG_ON) console.groupEnd();
             return false;
         default:
             throw new Error(`Unrecognized K op (${JSON.stringify(k)}`);
         }
 
+        if (DEBUG_ON) console.groupEnd();
         return true;
     }
 
