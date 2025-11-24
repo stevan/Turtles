@@ -82,19 +82,12 @@ export class Machine {
         let result;
         while (this.queue.length > 0) {
             let k = this.queue.pop() as Kontinue;
-
             if (!this.step(k)) {
-                if (DEBUG_ON) {
-                console.log('!! HALT ' + KSHOW(k));
-                KDUMP(this.cc, this.queue);}
-
+                if (DEBUG_ON) console.log('!!  HALT :' + KSHOW(k));
                 result = k.stack.shift() as Types.Expr;
                 break;
             }
-
-            if (DEBUG_ON) {
-            KDUMP(this.cc, this.queue);
-            console.log('\n');}
+            if (DEBUG_ON) KDUMP(this.cc, this.queue);
         }
 
         return result ?? AST.Nil();
@@ -110,9 +103,7 @@ export class Machine {
     }
 
     step (k : Kontinue) : boolean {
-        if (DEBUG_ON) {
-        console.log('^ STEP :', KSHOW(k));
-        console.log('.'.repeat(80));}
+        if (DEBUG_ON) console.log('^^  STEP :', KSHOW(k));
 
         switch (k.op) {
         case 'EVAL':
@@ -168,7 +159,7 @@ export class Machine {
 
 
     evaluate (expr : Types.Expr) : Kontinue {
-        console.log(`>> EVAL [${expr.type}]`, DEBUG.SHOW(expr));
+        console.log(`>>  EVAL : [${expr.type}]`, DEBUG.SHOW(expr));
         switch (expr.type) {
         case 'NUM'   :
         case 'STR'   :
@@ -183,7 +174,7 @@ export class Machine {
     }
 
     apply (call : Types.Callable, args : Types.Expr[]) : Kontinuation {
-        console.log(`>> APPLY ${DEBUG.SHOW(call)} -> `, args.map(DEBUG.SHOW));
+        console.log(`&& APPLY : ${DEBUG.SHOW(call)} -> `, args.map(DEBUG.SHOW));
         switch (call.type) {
         case 'FEXPR':
             return [ Eval(call.body( Util.List.flatten(args[0] as Types.List), this.cc )) ];
