@@ -54,7 +54,7 @@ export class Interpreter {
         console.log('─'.repeat(80));}
 
         switch (expr.type) {
-        // values
+        // callables
         case 'FEXPR':
         case 'NATIVE':
         case 'LAMBDA':

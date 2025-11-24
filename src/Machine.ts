@@ -13,26 +13,36 @@ import {
 type Halt   = { op : 'HALT',  stack : Types.Expr[] }
 type Just   = { op : 'JUST',  stack : Types.Expr[] }
 type Eval   = { op : 'EVAL',  stack : Types.Expr[], expr : Types.Expr }
-type EHead  = { op : 'EHEAD', stack : Types.Expr[], cons : Types.Cons }
 type Call   = { op : 'CALL?', stack : Types.Expr[], args : Types.List }
 type Apply  = { op : 'APPLY', stack : Types.Expr[], call : Types.Callable }
+type Choice = { op : 'CHEWZ', stack : Types.Expr[], cond : Types.Cond }
 type Enter  = { op : 'ECTX',  stack : Types.Expr[], call : Types.Lambda }
 type Bind   = { op : 'BIND',  stack : Types.Expr[], params : Types.List }
 type Leave  = { op : 'LCTX',  stack : Types.Expr[] }
 
-function Eval   (expr : Types.Expr)     : Eval  { return { op : 'EVAL',  stack : [], expr } }
-function EHead  (cons : Types.Cons)     : EHead { return { op : 'EHEAD', stack : [], cons } }
-function Call   (args : Types.List)     : Call  { return { op : 'CALL?', stack : [], args } }
-function Apply  (call : Types.Callable) : Apply { return { op : 'APPLY', stack : [], call } }
-function Just   (...j : Types.Expr[])   : Just  { return { op : 'JUST',  stack : [ ...j ] } }
-function Halt   ()                      : Halt  { return { op : 'HALT',  stack : [] } }
-function Leave  ()                      : Leave { return { op : 'LCTX',  stack : [] } }
-function Enter  (call : Types.Lambda)   : Enter { return { op : 'ECTX',  stack : [], call } }
+function Eval   (expr : Types.Expr)     : Eval   { return { op : 'EVAL',  stack : [], expr } }
+function Call   (args : Types.List)     : Call   { return { op : 'CALL?', stack : [], args } }
+function Apply  (call : Types.Callable) : Apply  { return { op : 'APPLY', stack : [], call } }
+function Just   (...j : Types.Expr[])   : Just   { return { op : 'JUST',  stack : [ ...j ] } }
+function Halt   ()                      : Halt   { return { op : 'HALT',  stack : [] } }
+function Leave  ()                      : Leave  { return { op : 'LCTX',  stack : [] } }
+function Choice (cond : Types.Cond)     : Choice { return { op : 'CHEWZ', stack : [], cond } }
+function Enter  (call : Types.Lambda)   : Enter  { return { op : 'ECTX',  stack : [], call } }
 function Bind   (params : Types.List, args : Types.Expr[]) : Bind  {
     return { op : 'BIND', stack : [ ...args ], params }
 }
 
-type Kontinue     = Halt | Just | Eval | EHead| Call | Apply | Enter | Leave | Bind
+type Kontinue =
+    | Halt
+    | Just
+    | Eval
+    | Call
+    | Apply
+    | Enter
+    | Leave
+    | Bind
+    | Choice
+
 type Kontinuation = Kontinue[];
 
 const KSHOW = (k : Kontinue) : string => {
@@ -40,11 +50,11 @@ const KSHOW = (k : Kontinue) : string => {
     case 'HALT'  : return `${k.op}:[${k.stack.map(DEBUG.SHOW).join(', ')}]`
     case 'JUST'  : return `${k.op}:[${k.stack.map(DEBUG.SHOW).join(', ')}]`
     case 'EVAL'  : return `${k.op}{${DEBUG.SHOW(k.expr)}}:[${k.stack.map(DEBUG.SHOW).join(', ')}]`
-    case 'EHEAD' : return `${k.op}{${DEBUG.SHOW(k.cons)}}:[${k.stack.map(DEBUG.SHOW).join(', ')}]`
     case 'CALL?' : return `${k.op}{${DEBUG.SHOW(k.args)}}:[${k.stack.map(DEBUG.SHOW).join(', ')}]`
     case 'APPLY' : return `${k.op}{${DEBUG.SHOW(k.call)}}:[${k.stack.map(DEBUG.SHOW).join(', ')}]`
     case 'ECTX'  : return `${k.op}{${DEBUG.SHOW(k.call)}}:[${k.stack.map(DEBUG.SHOW).join(', ')}]`
     case 'BIND'  : return `${k.op}{${DEBUG.SHOW(k.params)}}:[${k.stack.map(DEBUG.SHOW).join(', ')}]`
+    case 'CHEWZ' : return `${k.op}{${DEBUG.SHOW(k.cond)}}:[${k.stack.map(DEBUG.SHOW).join(', ')}]`
     case 'LCTX'  : return `${k.op}:[${k.stack.map(DEBUG.SHOW).join(', ')}]`
     }
 }
@@ -58,7 +68,7 @@ const KDUMP = (ctx : Context, queue : Kontinuation) => {
 }
 
 const DEBUG_DEEP = false;
-const DEBUG_BASE = DEBUG_DEEP || true;
+const DEBUG_BASE = DEBUG_DEEP || false;
 
 export class Machine {
     public rootEnv : Env;
@@ -123,13 +133,15 @@ export class Machine {
 
         switch (k.op) {
         case 'EVAL':
-            this.continueK( this.evaluate( k.expr ), Just(...k.stack) );
-            break;
-        case 'EHEAD':
-            this.continueK( Call( k.cons.tail ), Eval( k.cons.head ) );
+            this.continueK( ...this.evaluate( k.expr ), Just(...k.stack) );
             break;
         case 'APPLY':
             this.continueK( ...this.apply( k.call, k.stack ) );
+            break;
+        case 'CHEWZ':
+            let [ cond ] = k.stack;
+            Util.Type.assertBool(cond);
+            this.continueK( cond.value ? Eval(k.cond.ifTrue) : Eval(k.cond.ifFalse) );
             break;
         case 'CALL?':
             let [ call ] = k.stack;
@@ -176,16 +188,22 @@ export class Machine {
     }
 
 
-    evaluate (expr : Types.Expr) : Kontinue {
+    evaluate (expr : Types.Expr) : Kontinuation {
         if (DEBUG_BASE) console.log(`>>  eval : [${expr.type}]`, DEBUG.SHOW(expr));
         switch (expr.type) {
+        // callables
+        case 'FEXPR' :
+        case 'NATIVE':
+        case 'LAMBDA':
+        // literals
         case 'NUM'   :
         case 'STR'   :
-        case 'BOOL'  : return Just(expr);
-        case 'SYM'   : return Just(this.cc.env.lookup(expr));
-        case 'CONS'  : return EHead(expr);
-        case 'NIL'   : return Just(expr);
-        case 'LAMBDA': return Just(expr);
+        case 'BOOL'  :
+        // and nil, ... all evaluate to themselves
+        case 'NIL'   : return [ Just(expr)                       ];
+        case 'SYM'   : return [ Just(this.cc.env.lookup(expr))   ];
+        case 'CONS'  : return [ Call(expr.tail), Eval(expr.head) ];
+        case 'COND'  : return [ Choice(expr), Eval(expr.cond)    ];
         default:
             throw new Error('FUCK!');
         }

@@ -33,3 +33,22 @@ test("... basic test", (t) => {
     })
 })
 
+test("... basic test (if true)", (t) => {
+    let ast = Parser.parse(`(if (== 10 10) (* 2 10) (+ 2 10))`);
+    console.log('>>>', DEBUG.SHOW(ast));
+    let m   = new Machine();
+    let got = m.run( ast );
+    console.log('<<<', DEBUG.SHOW(got));
+    assert.strictEqual(got.type, 'NUM', '... got the expected type');
+    assert.strictEqual(got.value, 20, '... got the expected value');
+})
+
+test("... basic test (if false)", (t) => {
+    let ast = Parser.parse(`(if (== 11 10) (* 2 10) (+ 2 10))`);
+    console.log('>>>', DEBUG.SHOW(ast));
+    let m   = new Machine();
+    let got = m.run( ast );
+    console.log('<<<', DEBUG.SHOW(got));
+    assert.strictEqual(got.type, 'NUM', '... got the expected type');
+    assert.strictEqual(got.value, 12, '... got the expected value');
+})

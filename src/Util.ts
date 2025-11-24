@@ -41,7 +41,6 @@ export namespace Type {
         return v.type == 'FEXPR'
             || v.type == 'NATIVE'
             || v.type == 'LAMBDA'
-            || v.type == 'COND'
     }
 
 
