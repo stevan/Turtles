@@ -50,11 +50,11 @@ const KSHOW = (k : Kontinue) : string => {
 }
 
 const KDUMP = (ctx : Context, queue : Kontinuation) => {
-    console.log('-'.repeat(80));
-    console.log('QUEUE :\n  -', queue.map(KSHOW).reverse().join(';\n  - '));
-    console.log('-'.repeat(80));
+    console.log('─'.repeat(80));
+    console.log('QUEUE :\n  ◇', queue.map(KSHOW).reverse().join(';\n  ◆ '));
+    console.log('─'.repeat(80));
     console.log(` %ENV :`, DEBUG.DUMP(ctx.env));
-    console.log('='.repeat(80));
+    console.log('═'.repeat(80));
 }
 
 const DEBUG_ON = true;
@@ -82,7 +82,7 @@ export class Machine {
     run (expr : Types.Expr) : Types.Expr {
         if (DEBUG_ON) {
             console.log('~~   RUN :', DEBUG.SHOW(expr));
-            console.log(':'.repeat(80));}
+            console.log('═'.repeat(80));}
 
         this.queue.push( Eval(expr) );
 
@@ -98,7 +98,7 @@ export class Machine {
 
         if (DEBUG_ON) {
             console.log('!!  HALT :' + DEBUG.SHOW(result));
-            console.log(':'.repeat(80));}
+            console.log('═'.repeat(80));}
 
         return result;
     }
@@ -115,11 +115,11 @@ export class Machine {
     step (k : Kontinue) : boolean {
         this.step_count++;
         if (DEBUG_ON) {
-            console.log('-'.repeat(80));
-            console.group('^STEP.'+(this.step_count).toString().padStart(3, '0')+':');
-            console.log('-'.repeat(78));
-            console.log('...', KSHOW(k));
-            console.log('-'.repeat(78));}
+            console.log('─'.repeat(80));
+            console.log('^STEP.'+(this.step_count).toString().padStart(3, '0')+':');
+            console.log('─'.repeat(80));
+            console.group('○', KSHOW(k));
+            console.log('─'.repeat(78));}
 
         switch (k.op) {
         case 'EVAL':
@@ -177,7 +177,7 @@ export class Machine {
 
 
     evaluate (expr : Types.Expr) : Kontinue {
-        console.log(`>>  EVAL : [${expr.type}]`, DEBUG.SHOW(expr));
+        console.log(`>>  eval : [${expr.type}]`, DEBUG.SHOW(expr));
         switch (expr.type) {
         case 'NUM'   :
         case 'STR'   :
@@ -192,7 +192,7 @@ export class Machine {
     }
 
     apply (call : Types.Callable, args : Types.Expr[]) : Kontinuation {
-        console.log(`&& APPLY : ${DEBUG.SHOW(call)} -> `, args.map(DEBUG.SHOW));
+        console.log(`&& apply : ${DEBUG.SHOW(call)} -> `, args.map(DEBUG.SHOW));
         switch (call.type) {
         case 'FEXPR':
             return [ Eval(call.body( Util.List.flatten(args[0] as Types.List), this.cc )) ];
