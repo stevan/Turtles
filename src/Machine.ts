@@ -261,17 +261,7 @@ export class Machine {
     createRootEnvironment () : Env {
         let env = createBaseEnvironment();
 
-        env.assign( AST.Sym('lambda'), AST.FExpr(
-            Util.List.make( AST.Sym('params'), AST.Sym('body') ),
-            (args : Types.Expr[], ctx : Context) : Types.Expr => {
-                let [ params, body ] = args;
-                Util.Type.assertList(params);
-                Util.Type.assertList(body);
-                if (DEBUG_DEEP) {
-                console.log("... creating Lambda with", DEBUG.DUMP(ctx.env));}
-                return AST.Lambda( params as Types.List, body as Types.Expr, ctx.env );
-            }
-        ));
+        // ...
 
         return env;
     }
