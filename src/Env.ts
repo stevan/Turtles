@@ -11,6 +11,10 @@ export class Env {
         this.parent = parent;
     }
 
+    exists (name : Types.Sym) : boolean {
+        return this.bindings.has(name.ident) || (this.parent?.exists(name) ?? false);
+    }
+
     lookup (name : Types.Sym) : Types.Expr {
         let result = this.bindings.get(name.ident) ?? this.parent?.lookup(name);
         if (result == undefined) throw new Error(`Unable to find ${name.type}(${name.ident}) in E`);

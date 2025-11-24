@@ -1,7 +1,8 @@
 
-import * as Types from './Types'
-import * as AST   from './AST'
-import * as Util  from './Util'
+import * as Types   from './Types'
+import * as AST     from './AST'
+import * as Util    from './Util'
+import { MaybeEnv } from './Env'
 
 type SExpr = Types.Expr | SExpr[];
 
@@ -53,18 +54,23 @@ function buildTree (sexpr : SExpr) : Types.Expr {
     }
 }
 
-export function format (expr : Types.Expr) : string {
+export function format (expr : Types.Expr, env : MaybeEnv = undefined) : string {
     switch (expr.type) {
     case 'BOOL'   : return expr.value ? 'true' : 'false';
     case 'NUM'    : return expr.value.toString();
     case 'STR'    : return `"${expr.value}"`;
     case 'NIL'    : return '()';
-    case 'CONS'   : return `(${ Util.List.flatten(expr).map(format).join(' ') })`;
-    case 'SYM'    : return expr.ident;
-    case 'LAMBDA' : return `(lambda ${format(expr.params)} ${format(expr.body)})`;
-    case 'NATIVE' : return `(#:native ${format(expr.params)})`;
-    case 'FEXPR'  : return `(@:fexpr ${format(expr.params)})`;
-    case 'COND'   : return `?(${[ expr.cond, expr.ifTrue, expr.ifFalse ].map(format).join(' ') })`;
+    case 'CONS'   : return `(${ Util.List.flatten(expr).map((e) => format(e, env)).join(' ') })`;
+    case 'NATIVE' : return `(#:native ${format(expr.params, env)})`;
+    case 'FEXPR'  : return `(@:fexpr ${format(expr.params, env)})`;
+    case 'COND'   : return `?(${[ expr.cond, expr.ifTrue, expr.ifFalse ].map((e) => format(e, env)).join(' ') })`;
+    case 'LAMBDA' : return `(lambda ${format(expr.params, env)} ${format(expr.body, expr.env)})`;
+    case 'SYM'    :
+        if (env == undefined) return expr.ident;
+        return expr.ident
+            + (env.exists(expr) && Util.Type.isLiteral(env.lookup(expr))
+                ? `:[${format(env.lookup(expr), env)}]`
+                : '');
     default:
         return 'XXX'
     }

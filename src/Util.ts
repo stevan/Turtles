@@ -43,6 +43,11 @@ export namespace Type {
             || v.type == 'LAMBDA'
     }
 
+    export function isLiteral (v : any) : v is Types.Literal {
+        return v.type == 'NUM'
+            || v.type == 'STR'
+            || v.type == 'BOOL'
+    }
 
     export function assertSym (v : any) : asserts v is Types.Sym {
         if (v.type != 'SYM') throw new Error(`Expected Sym and got ${JSON.stringify(v)}`);
@@ -58,7 +63,7 @@ export namespace Type {
     }
 
     export function assertLiteral (v : any) : asserts v is Types.Literal {
-        if (v.type != 'NUM' && v.type != 'STR' && v.type != 'BOOL')
+        if (!isLiteral(v))
             throw new Error(`Expected Literal and got ${JSON.stringify(v)}`);
     }
 
