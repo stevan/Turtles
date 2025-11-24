@@ -1,6 +1,7 @@
 
 import type * as Types  from './Types'
 import type { Context } from './Context'
+import type { Env }     from './Env'
 
 export function True  () : Types.Bool { return { type : 'BOOL', value : true  } }
 export function False () : Types.Bool { return { type : 'BOOL', value : false } }
@@ -13,8 +14,8 @@ export function Cons (head : Types.Expr, tail : Types.List) : Types.List { retur
 
 export function Native (params : Types.List, body : Types.NativeFunc)  : Types.Native  { return { type : 'NATIVE', params, body } }
 export function FExpr  (params : Types.List, body : Types.NativeFExpr) : Types.FExpr   { return { type : 'FEXPR',  params, body } }
-export function Lambda (params : Types.List, body : Types.Expr, ctx : Context) : Types.Lambda {
-    return { type : 'LAMBDA', params, body, ctx }
+export function Lambda (params : Types.List, body : Types.Expr, env : Env) : Types.Lambda {
+    return { type : 'LAMBDA', params, body, env }
 }
 
 export function Sym (ident : string) : Types.Sym { return { type : 'SYM',  ident } }

@@ -29,19 +29,27 @@ export class Interpreter {
     }
 
     run (expr : Types.Expr) : Types.Expr {
+        if (DEBUG_ON) {
+        console.log('~~   RUN :', DEBUG.SHOW(expr));
+        console.log('═'.repeat(80));}
+
         let result = this.cc.evaluate(expr);
 
         if (DEBUG_ON) {
         console.log(`HALT `, DEBUG.SHOW(result));
-        console.log(`%ENV `, DEBUG.DUMP(this.cc.env));}
+        console.log(`%ENV `, DEBUG.DUMP(this.cc.env));
+        console.log('═'.repeat(80));}
 
         return result;
     }
 
     evaluate (expr : Types.Expr) : Types.Expr {
         if (DEBUG_ON) {
+        console.log('─'.repeat(80));
+        console.log(`EVAL (${expr.type})`, DEBUG.SHOW(expr));
+        console.log('─'.repeat(80));
         console.log(`%ENV `, DEBUG.DUMP(this.cc.env));
-        console.log(`EVAL (${expr.type})`, DEBUG.SHOW(expr));}
+        console.log('─'.repeat(80));}
 
         switch (expr.type) {
         case 'NUM'   :
@@ -80,18 +88,10 @@ export class Interpreter {
         }
     }
 
-    enterContext (ctx : Context) : void {
-        this.stack.push(ctx);
-        this.cc.enterScope();
-    }
-
-    leaveContext () : void {
-        this.cc.leaveScope();
-        this.stack.pop();
-    }
-
     callLambda (call : Types.Lambda, args : Types.List) : Types.Expr {
-        this.enterContext( call.ctx );
+
+        this.stack.push(new Context( call.env, this.cc.evaluate ));
+        this.cc.enterScope( call.env );
         // ...
         let flatArgs = Util.List.flatten( args );
         let params   = Util.List.flatten( call.params );
@@ -102,10 +102,21 @@ export class Interpreter {
             let arg = flatArgs[i] as Types.Expr;
             this.cc.env.assign( param, arg );
         }
+
+        if (DEBUG_ON) {
+        console.group(`>> CALLING LAMBDA ${DEBUG.SHOW(call)}`);
+        console.log('─'.repeat(78));
+        console.log(`   E -> `, DEBUG.DUMP(this.cc.env));
+        console.log(`   e -> `, DEBUG.DUMP(call.env));
+        console.log(`args -> `, DEBUG.SHOW(args));
+        console.log('─'.repeat(78));
+        console.groupEnd();}
+
         // evalute lambda in new scope
         let result = this.cc.evaluate( call.body );
         // ...
-        this.leaveContext();
+        this.cc.leaveScope();
+        this.stack.pop();
         // return ...
         return result;
     }
@@ -119,7 +130,9 @@ export class Interpreter {
                 let [ params, body ] = args;
                 Util.Type.assertList(params);
                 Util.Type.assertList(body);
-                return AST.Lambda( params as Types.List, body as Types.Expr, ctx );
+                if (DEBUG_ON) {
+                    console.log("... creating Lambda with", DEBUG.DUMP(ctx.env));}
+                return AST.Lambda( params as Types.List, body as Types.Expr, ctx.env );
             }
         ));
 

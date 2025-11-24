@@ -13,8 +13,8 @@ export namespace DEBUG {
     }
 
     export function DUMP (env : Env) : string {
-        return `%E[${env.depth()}]{${ [ ...env.bindings.keys() ].map((e) => ("`" + e)).join(', ') }} `
-            + ((env.parent?.parent == undefined) ? '%E[_]' : ` ^(${ DUMP(env.parent) })`)
+        return `%E[${env.depth()}]{${ [ ...env.bindings.entries() ].map(([k,v]) => (`'${k}:${SHOW(v)}`)).join(', ') }} `
+            + ((env.parent?.parent == undefined) ? '%E[_]' : `${ DUMP(env.parent) }`)
     }
 }
 

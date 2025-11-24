@@ -6,6 +6,7 @@ import { DEBUG }       from '../src/Runtime'
 import   * as Parser   from '../src/Parser'
 import { Interpreter } from '../src/Interpreter'
 
+
 test("... basic test", (t) => {
 
     let testCode = [
@@ -18,6 +19,7 @@ test("... basic test", (t) => {
         `((lambda (x y) (+ x y)) (+ 5 5) 20)`,
         `((lambda (x y) (+ x y)) 10 (* 2 10))`,
         `((lambda (x y) (+ x y)) (+ 5 5) (* 2 10))`,
+        `(((lambda (x) (lambda (y) (+ x y))) 10) 20)`,
     ];
 
     testCode.forEach((src) => {
@@ -50,3 +52,4 @@ test("... basic test", (t) => {
     assert.strictEqual(got.type, 'NUM', '... got the expected type');
     assert.strictEqual(got.value, 12, '... got the expected value');
 })
+

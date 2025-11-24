@@ -20,10 +20,10 @@ export class Context {
         return this.scope.at(-1) as Env;
     }
 
-    enterScope () : Env {
-        let env = this.env.derive();
-        this.scope.push(env);
-        return env;
+    enterScope (env : Env) : Env {
+        let local = env.derive();
+        this.scope.push(local);
+        return local;
     }
 
     leaveScope () : void {
