@@ -2,6 +2,26 @@
 # NOTES
 <!----------------------------------------------------------------------------->
 
+
+
+```lisp
+(((lambda (x)
+    (lambda (y)
+        (lambda (z)
+            (+ x (* y z))
+        )
+    )
+) 5) 2)
+
+```
+- prints: (lambda (z) (+ x:[5] (* y:[2] z)))
+
+
+
+
+
+
+
 ## Context
 
 - create Context type

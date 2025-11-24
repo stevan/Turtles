@@ -67,7 +67,7 @@ const KDUMP = (ctx : Context, queue : Kontinuation) => {
     console.log('═'.repeat(80));
 }
 
-const DEBUG_DEEP = false;
+const DEBUG_DEEP = true;
 const DEBUG_BASE = DEBUG_DEEP || false;
 
 export class Machine {
@@ -128,6 +128,7 @@ export class Machine {
             console.log('─'.repeat(80));
             console.log('^STEP.'+(++this.pc).toString().padStart(3, '0')+':');
             console.log('─'.repeat(80));
+            console.log('%', DEBUG.DUMP(this.cc.env));
             console.group('○', KSHOW(k));
             console.log('─'.repeat(78));}
 
@@ -171,6 +172,7 @@ export class Machine {
             this.returnK( k );
             break;
         case 'BIND':
+            console.log('!!!!!!!!!!!', KSHOW(k));
             this.bindParams( k.params, k.stack );
             break;
         case 'JUST':
@@ -204,6 +206,7 @@ export class Machine {
         case 'SYM'   : return [ Just(this.cc.env.lookup(expr))   ];
         case 'CONS'  : return [ Call(expr.tail), Eval(expr.head) ];
         case 'COND'  : return [ Choice(expr), Eval(expr.cond)    ];
+        case 'BIND'  : return [ Bind(Util.List.make(expr.name), []), Eval(expr.value) ];
         default:
             throw new Error('FUCK!');
         }

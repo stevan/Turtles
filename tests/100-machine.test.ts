@@ -2,15 +2,13 @@
 import * as Parser from '../src/Parser'
 import { Machine } from '../src/Machine'
 
-let ast = Parser.parse(`
-    (((lambda (x)
-        (lambda (y)
-            (lambda (z)
-                (+ x (* y z))
-            )
-        )
-    ) 5) 2)
-`);
+let ast = Parser.parse(`(
+    (defun (add x y) (+ x y))
+
+    (add 10 20)
+
+
+)`);
 let m   = new Machine();
 let got = m.run( ast );
 

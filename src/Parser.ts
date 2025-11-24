@@ -65,6 +65,7 @@ export function format (expr : Types.Expr, env : MaybeEnv = undefined) : string 
     case 'FEXPR'  : return `(@:fexpr ${format(expr.params, env)})`;
     case 'COND'   : return `?(${[ expr.cond, expr.ifTrue, expr.ifFalse ].map((e) => format(e, env)).join(' ') })`;
     case 'LAMBDA' : return `(lambda ${format(expr.params, env)} ${format(expr.body, expr.env)})`;
+    case 'BIND'   : return `(${format(expr.name, env)} := ${format(expr.value, env)})`
     case 'SYM'    :
         if (env == undefined) return expr.ident;
         return expr.ident

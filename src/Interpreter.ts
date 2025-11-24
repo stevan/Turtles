@@ -10,7 +10,7 @@ import {
     createBaseEnvironment,
 } from './Runtime'
 
-const DEBUG_ON = false;
+const DEBUG_ON = true;
 
 export class Interpreter {
     public rootEnv : Env;
@@ -65,6 +65,10 @@ export class Interpreter {
         // and nil, ... all evaluate to themselves
         case 'NIL'   : return expr;
         case 'SYM'   : return this.cc.env.lookup(expr);
+        case 'BIND'  :
+            let value = this.cc.evaluate( expr.value );
+            this.cc.env.assign( expr.name, value );
+            return AST.Nil();
         case 'COND':
             let cond = this.cc.evaluate( expr.cond );
             Util.Type.assertBool(cond);

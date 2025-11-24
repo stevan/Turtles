@@ -28,10 +28,12 @@ export type NativeFExpr = ( args : Expr[], ctx : Context ) => Expr
 export type Native = { type : 'NATIVE', params : List, body : NativeFunc  }
 export type FExpr  = { type : 'FEXPR',  params : List, body : NativeFExpr }
 export type Lambda = { type : 'LAMBDA', params : List, body : Expr, env : Env }
-export type Cond   = { type : 'COND',   cond : Expr, ifTrue : Expr, ifFalse : Expr }
 
 export type Callable = Lambda | Native | FExpr
 
+export type Cond = { type : 'COND', cond : Expr, ifTrue : Expr, ifFalse : Expr }
+export type Bind = { type : 'BIND', name : Sym, value : Expr }
+
 // all of them at once ...
 
-export type Expr  = Literal | List | Sym | Callable | Cond
+export type Expr = Literal | List | Sym | Callable | Cond | Bind

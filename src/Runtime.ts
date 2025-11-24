@@ -21,6 +21,22 @@ export namespace DEBUG {
 export function createBaseEnvironment () : Env {
     let env = new Env();
 
+    env.assign( AST.Sym('defun'), AST.FExpr(
+        Util.List.make( AST.Sym('signature'), AST.Sym('body') ),
+        (args : Types.Expr[], ctx : Context) : Types.Expr => {
+            let [ signature, body ] = args;
+            Util.Type.assertList(signature);
+            Util.Type.assertList(body);
+            let [ name, ...params ] = Util.List.flatten(signature);
+            Util.Type.assertSym(name);
+            params.map((p) => Util.Type.assertSym(p));
+            return AST.Bind(
+                name,
+                AST.Lambda( Util.List.make(...params), body as Types.Expr, ctx.env )
+            );
+        }
+    ));
+
     env.assign( AST.Sym('lambda'), AST.FExpr(
         Util.List.make( AST.Sym('params'), AST.Sym('body') ),
         (args : Types.Expr[], ctx : Context) : Types.Expr => {
