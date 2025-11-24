@@ -21,6 +21,27 @@ export namespace DEBUG {
 export function createBaseEnvironment () : Env {
     let env = new Env();
 
+    env.assign( AST.Sym('lambda'), AST.FExpr(
+        Util.List.make( AST.Sym('params'), AST.Sym('body') ),
+        (args : Types.Expr[], ctx : Context) : Types.Expr => {
+            let [ params, body ] = args;
+            Util.Type.assertList(params);
+            Util.Type.assertList(body);
+            return AST.Lambda( params as Types.List, body as Types.Expr, ctx.env );
+        }
+    ));
+
+    env.assign( AST.Sym('if'), AST.FExpr(
+        Util.List.make( AST.Sym('cond'), AST.Sym('then'), AST.Sym('else') ),
+        (args : Types.Expr[], ctx : Context) : Types.Expr => {
+            let [ cond, thenBranch, elseBranch ] = args;
+            Util.Type.assertList(cond);
+            Util.Type.assertList(thenBranch);
+            Util.Type.assertList(elseBranch);
+            return AST.Cond( cond, thenBranch, elseBranch );
+        }
+    ));
+
     env.assign( AST.Sym('=='), liftPredicate((n, m) => n == m));
     env.assign( AST.Sym('!='), liftPredicate((n, m) => n != m));
 

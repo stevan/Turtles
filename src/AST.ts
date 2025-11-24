@@ -17,5 +17,8 @@ export function FExpr  (params : Types.List, body : Types.NativeFExpr) : Types.F
 export function Lambda (params : Types.List, body : Types.Expr, env : Env) : Types.Lambda {
     return { type : 'LAMBDA', params, body, env }
 }
+export function Cond (cond : Types.Expr, ifTrue : Types.Expr, ifFalse : Types.Expr) : Types.Cond {
+    return { type : 'COND', cond, ifTrue, ifFalse }
+}
 
 export function Sym (ident : string) : Types.Sym { return { type : 'SYM',  ident } }

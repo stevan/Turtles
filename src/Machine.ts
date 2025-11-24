@@ -57,7 +57,8 @@ const KDUMP = (ctx : Context, queue : Kontinuation) => {
     console.log('═'.repeat(80));
 }
 
-const DEBUG_ON = true;
+const DEBUG_DEEP = false;
+const DEBUG_BASE = DEBUG_DEEP || true;
 
 export class Machine {
     public rootEnv : Env;
@@ -65,7 +66,7 @@ export class Machine {
     public stack   : Context[]    = [];
     public queue   : Kontinuation = [];
 
-    public step_count : number = 0;
+    public pc : number = 0;
 
     constructor (env? : MaybeEnv) {
         this.rootEnv = env ?? this.createRootEnvironment();
@@ -80,7 +81,7 @@ export class Machine {
     }
 
     run (expr : Types.Expr) : Types.Expr {
-        if (DEBUG_ON) {
+        if (DEBUG_DEEP) {
             console.log('~~   RUN :', DEBUG.SHOW(expr));
             console.log('═'.repeat(80));}
 
@@ -93,10 +94,10 @@ export class Machine {
                 result = k.stack.shift() as Types.Expr;
                 break;
             }
-            if (DEBUG_ON) KDUMP(this.cc, this.queue);
+            if (DEBUG_DEEP) KDUMP(this.cc, this.queue);
         }
 
-        if (DEBUG_ON) {
+        if (DEBUG_DEEP) {
             console.log('!!  HALT :' + DEBUG.SHOW(result));
             console.log('═'.repeat(80));}
 
@@ -113,10 +114,9 @@ export class Machine {
     }
 
     step (k : Kontinue) : boolean {
-        this.step_count++;
-        if (DEBUG_ON) {
+        if (DEBUG_DEEP) {
             console.log('─'.repeat(80));
-            console.log('^STEP.'+(this.step_count).toString().padStart(3, '0')+':');
+            console.log('^STEP.'+(++this.pc).toString().padStart(3, '0')+':');
             console.log('─'.repeat(80));
             console.group('○', KSHOW(k));
             console.log('─'.repeat(78));}
@@ -152,32 +152,32 @@ export class Machine {
             }
             break;
         case 'ECTX':
-            this.enterContext( k.call.ctx )
-            break;
-        case 'BIND':
-            this.bindParams( k.params, k.stack );
+            this.enterContext( k.call )
             break;
         case 'LCTX':
             this.leaveContext()
             this.returnK( k );
             break;
+        case 'BIND':
+            this.bindParams( k.params, k.stack );
+            break;
         case 'JUST':
             this.returnK( k );
             break;
         case 'HALT':
-            if (DEBUG_ON) console.groupEnd();
+            if (DEBUG_DEEP) console.groupEnd();
             return false;
         default:
             throw new Error(`Unrecognized K op (${JSON.stringify(k)}`);
         }
 
-        if (DEBUG_ON) console.groupEnd();
+        if (DEBUG_DEEP) console.groupEnd();
         return true;
     }
 
 
     evaluate (expr : Types.Expr) : Kontinue {
-        console.log(`>>  eval : [${expr.type}]`, DEBUG.SHOW(expr));
+        if (DEBUG_BASE) console.log(`>>  eval : [${expr.type}]`, DEBUG.SHOW(expr));
         switch (expr.type) {
         case 'NUM'   :
         case 'STR'   :
@@ -192,13 +192,22 @@ export class Machine {
     }
 
     apply (call : Types.Callable, args : Types.Expr[]) : Kontinuation {
-        console.log(`&& apply : ${DEBUG.SHOW(call)} -> `, args.map(DEBUG.SHOW));
+        if (DEBUG_BASE) console.log(`&& apply : ${DEBUG.SHOW(call)} -> `, args.map(DEBUG.SHOW));
         switch (call.type) {
         case 'FEXPR':
             return [ Eval(call.body( Util.List.flatten(args[0] as Types.List), this.cc )) ];
         case 'NATIVE':
             return [ Just(call.body( args, this.cc )) ];
         case 'LAMBDA':
+            if (DEBUG_DEEP) {
+            console.group('─'.repeat(78));
+            console.log(`>> CALLING LAMBDA ${DEBUG.SHOW(call)}`);
+            console.log('─'.repeat(78));
+            console.log(`   E -> `, DEBUG.DUMP(this.cc.env));
+            console.log(`   e -> `, DEBUG.DUMP(call.env));
+            console.log(`args -> `, args.map(DEBUG.SHOW).join(', '));
+            console.log('─'.repeat(78));
+            console.groupEnd();}
             return [
                 Leave(),
                 Eval( call.body ),
@@ -210,9 +219,9 @@ export class Machine {
         }
     }
 
-    enterContext (ctx : Context) : void {
-        this.stack.push(ctx);
-        this.cc.enterScope();
+    enterContext (call : Types.Lambda) : void {
+        this.stack.push(new Context( call.env, this.cc.evaluate ));
+        this.cc.enterScope( call.env );
     }
 
     leaveContext () : void {
@@ -240,7 +249,9 @@ export class Machine {
                 let [ params, body ] = args;
                 Util.Type.assertList(params);
                 Util.Type.assertList(body);
-                return AST.Lambda( params as Types.List, body as Types.Expr, ctx );
+                if (DEBUG_DEEP) {
+                console.log("... creating Lambda with", DEBUG.DUMP(ctx.env));}
+                return AST.Lambda( params as Types.List, body as Types.Expr, ctx.env );
             }
         ));
 

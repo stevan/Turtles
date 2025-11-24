@@ -1,11 +1,35 @@
 
-import * as Parser from '../src/Parser'
-import { Machine } from '../src/Machine'
+import { test } from "node:test"
+import  assert  from "node:assert"
 
-let ast = Parser.parse(`((lambda (x) (+ x x)) 10)`);
-let m   = new Machine();
-let got = m.run( ast );
+import { DEBUG }     from '../src/Runtime'
+import   * as Parser from '../src/Parser'
+import { Machine }   from '../src/Machine'
 
-//console.log(JSON.stringify(got, null, 4));
-console.log('GOT', Parser.format(got));
+
+test("... basic test", (t) => {
+
+    let testCode = [
+        `30`,
+        `(+ 10 20)`,
+        `(+ 10 (+ 10 10))`,
+        `(+ (* 2 5) 20)`,
+        `(+ (+ 5 5) (* 2 10))`,
+        `((lambda (x y) (+ x y)) 10 20)`,
+        `((lambda (x y) (+ x y)) (+ 5 5) 20)`,
+        `((lambda (x y) (+ x y)) 10 (* 2 10))`,
+        `((lambda (x y) (+ x y)) (+ 5 5) (* 2 10))`,
+        `(((lambda (x) (lambda (y) (+ x y))) 10) 20)`,
+    ];
+
+    testCode.forEach((src) => {
+        let ast = Parser.parse(src);
+        console.log('>>>', DEBUG.SHOW(ast));
+        let m   = new Machine();
+        let got = m.run( ast );
+        console.log('<<<', DEBUG.SHOW(got));
+        assert.strictEqual(got.type, 'NUM', '... got the expected type');
+        assert.strictEqual(got.value, 30, '... got the expected value');
+    })
+})
 

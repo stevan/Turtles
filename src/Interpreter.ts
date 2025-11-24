@@ -17,6 +17,8 @@ export class Interpreter {
     public rootCtx : Context;
     public stack   : Context[] = [];
 
+    public pc : number = 0;
+
     constructor (env? : MaybeEnv) {
         this.rootEnv = env ?? this.createRootEnvironment();
         this.rootCtx = new Context(this.rootEnv.derive(), (expr) => this.evaluate(expr));
@@ -46,17 +48,27 @@ export class Interpreter {
     evaluate (expr : Types.Expr) : Types.Expr {
         if (DEBUG_ON) {
         console.log('─'.repeat(80));
-        console.log(`EVAL (${expr.type})`, DEBUG.SHOW(expr));
+        console.log(`EVAL.${(++this.pc).toString().padStart(3, '0')} (${expr.type})`, DEBUG.SHOW(expr));
         console.log('─'.repeat(80));
         console.log(`%ENV `, DEBUG.DUMP(this.cc.env));
         console.log('─'.repeat(80));}
 
         switch (expr.type) {
+        // values
+        case 'FEXPR':
+        case 'NATIVE':
+        case 'LAMBDA':
+        // literals
         case 'NUM'   :
         case 'STR'   :
-        case 'BOOL'  : return expr;
-        case 'SYM'   : return this.cc.env.lookup(expr);
+        case 'BOOL'  :
+        // and nil, ... all evaluate to themselves
         case 'NIL'   : return expr;
+        case 'SYM'   : return this.cc.env.lookup(expr);
+        case 'COND':
+            let cond = this.cc.evaluate( expr.cond );
+            Util.Type.assertBool(cond);
+            return this.cc.evaluate( cond.value ? expr.ifTrue : expr.ifFalse );
         case 'CONS'  :
             let head = this.cc.evaluate(expr.head);
             if (Util.Type.isCallable(head)) {
@@ -65,7 +77,7 @@ export class Interpreter {
                 return AST.Cons( head, this.cc.evaluate(expr.tail) as Types.List );
             }
         default:
-            throw new Error('WTF!');
+            throw new Error('WTF!'+JSON.stringify(expr));
         }
     }
 
@@ -78,7 +90,12 @@ export class Interpreter {
 
         switch (call.type) {
         case 'FEXPR':
-            return call.body( Util.List.flatten( args ), this.cc );
+            // NOTE:
+            // I am not sure if we should be evaluating the FExpr result
+            // here or if it makes more sense to evaluate it inside the
+            // FExpr body. I suspect it might make a difference in the
+            // Machine implementation more, so we will see
+            return this.cc.evaluate( call.body( Util.List.flatten( args ), this.cc ) );
         case 'NATIVE':
             return call.body( Util.List.flatten( evaluateArgs() ), this.cc );
         case 'LAMBDA':
@@ -124,30 +141,7 @@ export class Interpreter {
     createRootEnvironment () : Env {
         let env = createBaseEnvironment();
 
-        env.assign( AST.Sym('lambda'), AST.FExpr(
-            Util.List.make( AST.Sym('params'), AST.Sym('body') ),
-            (args : Types.Expr[], ctx : Context) : Types.Expr => {
-                let [ params, body ] = args;
-                Util.Type.assertList(params);
-                Util.Type.assertList(body);
-                if (DEBUG_ON) {
-                    console.log("... creating Lambda with", DEBUG.DUMP(ctx.env));}
-                return AST.Lambda( params as Types.List, body as Types.Expr, ctx.env );
-            }
-        ));
-
-        env.assign( AST.Sym('if'), AST.FExpr(
-            Util.List.make( AST.Sym('cond'), AST.Sym('then'), AST.Sym('else') ),
-            (args : Types.Expr[], ctx : Context) : Types.Expr => {
-                let [ cond, thenBranch, elseBranch ] = args;
-                Util.Type.assertList(cond);
-                Util.Type.assertList(thenBranch);
-                Util.Type.assertList(elseBranch);
-                let result = ctx.evaluate( cond as Types.Expr );
-                Util.Type.assertBool(result);
-                return ctx.evaluate( result.value ? thenBranch : elseBranch );
-            }
-        ));
+        // ...
 
         return env;
     }

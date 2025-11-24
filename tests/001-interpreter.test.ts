@@ -7,7 +7,7 @@ import   * as Parser   from '../src/Parser'
 import { Interpreter } from '../src/Interpreter'
 
 
-test("... basic test", (t) => {
+test("... basic test (lots)", (t) => {
 
     let testCode = [
         `30`,
@@ -33,7 +33,7 @@ test("... basic test", (t) => {
     })
 })
 
-test("... basic test", (t) => {
+test("... basic test (if true)", (t) => {
     let ast = Parser.parse(`(if (== 10 10) (* 2 10) (+ 2 10))`);
     console.log('>>>', DEBUG.SHOW(ast));
     let i   = new Interpreter();
@@ -43,7 +43,7 @@ test("... basic test", (t) => {
     assert.strictEqual(got.value, 20, '... got the expected value');
 })
 
-test("... basic test", (t) => {
+test("... basic test (if false)", (t) => {
     let ast = Parser.parse(`(if (== 11 10) (* 2 10) (+ 2 10))`);
     console.log('>>>', DEBUG.SHOW(ast));
     let i   = new Interpreter();

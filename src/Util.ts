@@ -38,7 +38,10 @@ export namespace Type {
     export function isCons (v : any) : v is Types.Cons { return v.type == 'CONS' }
 
     export function isCallable (v : any) : v is Types.Callable {
-        return v.type == 'FEXPR' || v.type == 'NATIVE' || v.type == 'LAMBDA'
+        return v.type == 'FEXPR'
+            || v.type == 'NATIVE'
+            || v.type == 'LAMBDA'
+            || v.type == 'COND'
     }
 
 

@@ -64,6 +64,7 @@ export function format (expr : Types.Expr) : string {
     case 'LAMBDA' : return `(lambda ${format(expr.params)} ${format(expr.body)})`;
     case 'NATIVE' : return `(#:native ${format(expr.params)})`;
     case 'FEXPR'  : return `(@:fexpr ${format(expr.params)})`;
+    case 'COND'   : return `?(${[ expr.cond, expr.ifTrue, expr.ifFalse ].map(format).join(' ') })`;
     default:
         return 'XXX'
     }
