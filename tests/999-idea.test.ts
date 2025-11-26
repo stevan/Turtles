@@ -142,57 +142,37 @@ const Apply   = (func   : Value, args : List) : Cons => tagged(Tags.Apply,   $.c
 const Lambda  = (params : List,  body : Cons) : Cons => tagged(Tags.Lambda,  $.cons(params, body));
 const Closure = (lambda : Cons,  env  : List) : Cons => tagged(Tags.Closure, $.cons(lambda,  env));
 
-
 const tokenize = (src : string) : string[] => src.match(/'(?:[^'\\]|\\.)*'|[()]|[^\s()']+/g) ?? []
 
-const lexer = (tokens : string[]) : any[][] => {
-    let stack : any[][] = [];
-    let expr  : any[] = [];
-    stack.push(expr);
-    while (tokens.length > 0) {
-        let token = tokens.shift();
-        if (token == undefined) throw new Error('WTF! undefined token')
-        //console.log('-'.repeat(80));
-        //console.log('token :', token);
-        //console.log('stack :', stack);
-        //console.log('expr  :', expr);
+const parse = (tokens : string[], expr : List = $.nil()) : List => {
+    if (tokens.length == 0) return expr;
 
-        switch (true) {
-        case token == '(' :
-            expr = [];
-            stack.push(expr);
-            break;
-        case token == ')' :
-            let next = stack.pop();
-            expr = stack.at(-1) as any[];
-            expr.push(next);
-            break;
-        case token == 'true' :
-            expr.push($.bool(true));
-            break;
-        case token == 'false' :
-            expr.push($.bool(false));
-            break;
-        case !isNaN(Number(token)):
-            expr.push($.num(Number(token)));
-            break;
-        default:
-            if (token.startsWith('"')) {
-                expr.push($.str(token))
-            } else {
-                expr.push($.sym(token));
-            }
+    let [ token, ...rest ] = tokens;
+    if (token == undefined) throw new Error('Undefined Token!');
+
+    switch (true) {
+    case token == '(' :
+
+    case token == ')' :
+
+    case token == '#t' : return parse( rest, cons( expr, $.bool(true)  ));
+    case token == '#f' : return parse( rest, cons( expr, $.bool(false) ));
+    case !isNaN(Number(token)):
+        return parse( rest, cons( rest, $.num(Number(token)) ));
+    default:
+        if (token.startsWith('"')) {
+            return parse( rest, cons( rest, expr.push($.str(token)) ));
+        } else {
+            return parse( rest, cons( rest, expr.push($.sym(token)) ));
         }
     }
-
-    return stack;
 }
 
 
 let tokens = tokenize('(10 true ("Hey!" foo))');
 
 console.log('TOKENS', tokens);
-console.log('PARSER', JSON.stringify(lexer(tokens), null, 4));
+console.log('PARSER', JSON.stringify(parse(tokens), null, 4));
 
 let term = $.list( $.num(10), $.bool(true), $.str("HEY!"), $.sym("foo") );
 
