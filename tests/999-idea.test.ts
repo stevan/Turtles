@@ -23,6 +23,39 @@ type Value = Atom | Pair | List
 // Core Runtime
 // -----------------------------------------------------------------------------
 
+type ParseExpr = Value | ParseExpr[];
+
+const parse = (source : string) : Value => {
+
+    const tokenize = (src : string) : string[] => src.match(/'(?:[^'\\]|\\.)*'|[()]|[^\s()']+/g) ?? []
+
+    const parseTokens = (tokens : string[]) : [ ParseExpr, string[] ] => {
+        let token = tokens[0];
+        if (token == undefined) throw new Error('Undefined Token');
+        let rest = tokens.slice(1);
+        if (token == '(') return parseList( rest, [] );
+        switch (true) {
+        case token == 'true'       : return [ $.bool(true),         rest ];
+        case token == 'false'      : return [ $.bool(false),        rest ];
+        case !isNaN(Number(token)) : return [ $.num(Number(token)), rest ];
+        case token.startsWith('"') : return [ $.str(token),         rest ];
+        default                    : return [ $.sym(token),         rest ];
+        }
+    }
+
+    const parseList = (tokens : string[], acc : ParseExpr[]) : [ ParseExpr[], string[] ] => {
+        if (tokens[0] === ')') return [ acc, tokens.slice(1) ];
+        let [ expr, remaining ] = parseTokens( tokens );
+        return parseList( remaining, [ ...acc, expr ] );
+    }
+
+    const buildTree = (expr : ParseExpr) : Value  =>
+        (Array.isArray(expr)) ? $.list( ...expr.map(buildTree) ) : expr;
+
+    let [ expr, rest ] = parseTokens( tokenize( source ) );
+    return buildTree( expr );
+}
+
 const $ = {
 
     typeOf : (v : Value) : string => v.type,
@@ -142,41 +175,12 @@ const Apply   = (func   : Value, args : List) : Cons => tagged(Tags.Apply,   $.c
 const Lambda  = (params : List,  body : Cons) : Cons => tagged(Tags.Lambda,  $.cons(params, body));
 const Closure = (lambda : Cons,  env  : List) : Cons => tagged(Tags.Closure, $.cons(lambda,  env));
 
-const tokenize = (src : string) : string[] => src.match(/'(?:[^'\\]|\\.)*'|[()]|[^\s()']+/g) ?? []
-
-const parse = (tokens : string[], expr : List = $.nil()) : List => {
-    if (tokens.length == 0) return expr;
-
-    let [ token, ...rest ] = tokens;
-    if (token == undefined) throw new Error('Undefined Token!');
-
-    switch (true) {
-    case token == '(' :
-
-    case token == ')' :
-
-    case token == '#t' : return parse( rest, cons( expr, $.bool(true)  ));
-    case token == '#f' : return parse( rest, cons( expr, $.bool(false) ));
-    case !isNaN(Number(token)):
-        return parse( rest, cons( rest, $.num(Number(token)) ));
-    default:
-        if (token.startsWith('"')) {
-            return parse( rest, cons( rest, expr.push($.str(token)) ));
-        } else {
-            return parse( rest, cons( rest, expr.push($.sym(token)) ));
-        }
-    }
-}
 
 
-let tokens = tokenize('(10 true ("Hey!" foo))');
+let tree = parse('(10 #t ("Hey!" #f) 1000 woot!)');
 
-console.log('TOKENS', tokens);
-console.log('PARSER', JSON.stringify(parse(tokens), null, 4));
 
-let term = $.list( $.num(10), $.bool(true), $.str("HEY!"), $.sym("foo") );
-
-console.log('AST', $.pprint(term));
+console.log('DEPARSE', $.pprint(tree));
 
 
 
