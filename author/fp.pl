@@ -195,6 +195,7 @@ sub DEBUG ($label, $orig) {
     *apply    = DEBUG('APPLY', \&apply);
 }
 
+
 # ...
 
 sub BINOP ($f, $c) {
@@ -230,11 +231,6 @@ my $env = env(
     '*'  => BINOP(sub ($n, $m) { $n * $m }, \&num),
     '/'  => BINOP(sub ($n, $m) { $n / $m }, \&num),
     '%'  => BINOP(sub ($n, $m) { $n % $m }, \&num),
-
-
-    'my' => BINOP(sub ($n, $m) {
-
-    }, \&id)
 );
 
 
