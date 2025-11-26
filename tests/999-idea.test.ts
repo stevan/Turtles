@@ -176,8 +176,7 @@ const Lambda  = (params : List,  body : Cons) : Cons => tagged(Tags.Lambda,  $.c
 const Closure = (lambda : Cons,  env  : List) : Cons => tagged(Tags.Closure, $.cons(lambda,  env));
 
 
-
-let tree = parse('(10 #t ("Hey!" #f) 1000 woot!)');
+let tree = parse('(lambda (x y) (+ x y))');
 
 
 console.log('DEPARSE', $.pprint(tree));
