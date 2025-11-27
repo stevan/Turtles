@@ -3,12 +3,14 @@
 // Types
 // -----------------------------------------------------------------------------
 
+type Native = { type : 'NATIVE', body : (args : List) => Value }
+
 type Bool = { type : 'BOOL', value : boolean }
 type Num  = { type : 'NUM',  value : number  }
 type Str  = { type : 'STR',  value : string  }
 type Sym  = { type : 'SYM',  ident : string  }
 
-type Atom = Bool | Num | Str | Sym
+type Atom = Bool | Num | Str | Native
 
 type Pair = { type : 'PAIR', first : Value, second : Value }
 
@@ -17,7 +19,7 @@ type Cons = { type : 'CONS', head : Value, tail : List }
 
 type List = Cons | Nil
 
-type Value = Atom | Pair | List
+type Value = Atom | Sym | Pair | List
 
 // -----------------------------------------------------------------------------
 // Core Runtime
@@ -66,14 +68,15 @@ const $Parser = {
 const $ = {
     typeOf : (v : Value) : string => v.type,
 
-    isTrue  : (v : Value) : v is Bool    => $.isBool(v) && v.value == true,
-    isFalse : (v : Value) : v is Bool    => $.isBool(v) && v.value == false,
-    isBool  : (v : Value) : v is Bool    => $.typeOf(v) == 'BOOL',
-    isNum   : (v : Value) : v is Num     => $.typeOf(v) == 'NUM',
-    isStr   : (v : Value) : v is Str     => $.typeOf(v) == 'STR',
-    isSym   : (v : Value) : v is Sym     => $.typeOf(v) == 'SYM',
-    isAtom  : (v : Value) : v is Atom    => $.isBool(v) || $.isNum(v) || $.isStr(v) || $.isSym(v),
+    isTrue   : (v : Value) : v is Bool    => $.isBool(v) && v.value == true,
+    isFalse  : (v : Value) : v is Bool    => $.isBool(v) && v.value == false,
+    isBool   : (v : Value) : v is Bool    => $.typeOf(v) == 'BOOL',
+    isNum    : (v : Value) : v is Num     => $.typeOf(v) == 'NUM',
+    isStr    : (v : Value) : v is Str     => $.typeOf(v) == 'STR',
+    isNative : (v : Value) : v is Native  => $.typeOf(v) == 'NATIVE',
+    isAtom   : (v : Value) : v is Atom    => $.isBool(v) || $.isNum(v) || $.isStr(v) || $.isNative(v),
 
+    isSym   : (v : Value) : v is Sym  => $.typeOf(v) == 'SYM',
     isPair  : (v : Value) : v is Pair => $.typeOf(v) == 'PAIR',
     isNil   : (v : Value) : v is Nil  => $.typeOf(v) == 'NIL',
     isCons  : (v : Value) : v is Cons => $.typeOf(v) == 'CONS',
@@ -135,6 +138,7 @@ const $ = {
         case $.isStr(v)   : return `"${v.value}"`;
         case $.isSym(v)   : return v.ident;
         case $.isPair(v)  : return `(${$.pprint(v.first)} : ${$.pprint(v.second)})`;
+        case $.isNative(v): return `&:native`;
         case $.isCons(v)  : return $.isNil(v.tail)
             ? `(${$.pprint(v.head)})`
             : `(${$.pprint(v.head)} ${$.List.flatten(v.tail).map((e) => $.pprint(e)).join(' ')})`;
@@ -194,10 +198,13 @@ const $Env = {
     },
 
     get : (env : Cons, symbol : Sym) : Value => {
-        return $.List.find( env.tail, (b) => {
+        let bind = $.List.find( env.tail, (b) => {
             if (!($.isPair(b) && $.isSym(b.first))) throw new Error('Expected pair!');
             return b.first.ident == symbol.ident;
-        })
+        });
+
+        if ($.isPair(bind)) return bind.second;
+        return bind;
     },
 }
 
@@ -273,15 +280,16 @@ const $Interpreter = {
                 let body = expr.tail;
                 if (!$.isCons(body)) throw new Error(`Expected Body List for Tag:${$.pprint(tag)} got ${$.pprint(body)}`);
                 let arg = body.head;
-                console.log(`TAG   + ${$.pprint(tag)} -> ${$.pprint(arg)}`);
+                console.log(`  TAG + ${$.pprint(tag)} -> ${$.pprint(arg)}`);
                 switch (tag.ident) {
-                case Tags.Apply : return $Interpreter.evaluate( arg, env );
+                case Tags.Apply : return $Interpreter.apply( $Interpreter.evaluate( arg as Cons, env ) as Cons, env );
                 case Tags.Val   : return arg;
                 case Tags.Var   : return $Interpreter.evaluate( arg, env );
                 default:
                     throw new Error(`TODO - ${$.pprint(expr)}`)
                 }
             } else {
+                console.log(`NOTAG - ${$.pprint(expr)}`);
                 return $Interpreter.evaluate( expr, env );
             }
         default:
@@ -313,15 +321,16 @@ const $Interpreter = {
 
     apply : (expr : Cons, env : Cons) : Value => {
         console.log(`APPLY | ${$.pprint(expr)}`);
-        let app = $Interpreter.exec( expr.head, env );
+        let app = expr.head;
         switch (true) {
+        case $.isNative(app):
+            return $Interpreter.exec( Closure( $.cons( app, $.cons(env) ) ), env );
         case isLambda(app):
-            return Closure( $.cons( app, $.cons(env) ) );
+            return $Interpreter.exec( Closure( $.cons( app, $.cons(env) ) ), env );
         case isClosure(app):
-            let fun = (app as Cons).head;
-            console.log("GOT", fun);
+            return $Interpreter.exec( Closure( $.cons( app, $.cons(env) ) ), env );
         default:
-            throw new Error(`APPLY! ${JSON.stringify(expr)}`);
+            throw new Error(`APPLY! ${$.pprint(expr)}`);
         }
     },
 }
@@ -341,7 +350,14 @@ console.log('compiled    :', $.pprint(compiled));
 //console.log('compiled :', JSON.stringify(compiled, null, 4));
 
 let env = $Env.create();
-env = $Env.set( env, $.sym('+'), $.num(10000) );
+env = $Env.set( env, $.sym('+'), {
+        type : 'NATIVE',
+        body : (args : List) : Value => {
+            console.log("HEY!!!!");
+            return $.num(1000010101);
+        }
+    }
+);
 console.log('environment :', $.pprint(env));
 
 console.group('... run');
