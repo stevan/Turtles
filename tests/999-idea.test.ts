@@ -328,7 +328,8 @@ const $Interpreter = {
         case isLambda(app):
             return $Interpreter.exec( Closure( $.cons( app, $.cons(env) ) ), env );
         case isClosure(app):
-            return $Interpreter.exec( Closure( $.cons( app, $.cons(env) ) ), env );
+            let fun = (app as Cons).head;
+            console.log("GOT", fun);
         default:
             throw new Error(`APPLY! ${$.pprint(expr)}`);
         }
