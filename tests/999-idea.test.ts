@@ -3,7 +3,7 @@
 // Types
 // -----------------------------------------------------------------------------
 
-type Native = { type : 'NATIVE', body : (args : List) => Value }
+type Native = { type : 'NATIVE', body : (env : Cons) => Value }
 
 type Bool = { type : 'BOOL', value : boolean }
 type Num  = { type : 'NUM',  value : number  }
@@ -282,9 +282,17 @@ const $Interpreter = {
                 let arg = body.head;
                 console.log(`  TAG + ${$.pprint(tag)} -> ${$.pprint(arg)}`);
                 switch (tag.ident) {
-                case Tags.Apply : return $Interpreter.apply( $Interpreter.evaluate( arg as Cons, env ) as Cons, env );
-                case Tags.Val   : return arg;
-                case Tags.Var   : return $Interpreter.evaluate( arg, env );
+                case Tags.Apply   : return $Interpreter.apply( $Interpreter.evaluate( arg as Cons, env ) as Cons, env );
+                case Tags.Val     : return arg;
+                case Tags.Var     : return $Interpreter.evaluate( arg, env );
+                case Tags.Closure :
+                    let abs   = (arg as Cons).head;
+                    let local = ((arg as Cons).tail as Cons).head;
+                    if ($.isNative(abs)) {
+                        return abs.body( local as Cons );
+                    } else {
+                        throw new Error(`CLOSURE TODO - ${$.pprint(expr)}`)
+                    }
                 default:
                     throw new Error(`TODO - ${$.pprint(expr)}`)
                 }
@@ -321,15 +329,21 @@ const $Interpreter = {
 
     apply : (expr : Cons, env : Cons) : Value => {
         console.log(`APPLY | ${$.pprint(expr)}`);
-        let app = expr.head;
+        let app  = expr.head;
+        let args = expr.tail;
+
+        let local = env;
+        if (!$.isNil(args)) {
+            local = $Env.set( env, $.sym('@_'), args );
+        }
+
         switch (true) {
         case $.isNative(app):
-            return $Interpreter.exec( Closure( $.cons( app, $.cons(env) ) ), env );
+            return $Interpreter.exec( Closure( $.cons( app, $.cons(local) ) ), env );
         case isLambda(app):
-            return $Interpreter.exec( Closure( $.cons( app, $.cons(env) ) ), env );
+            return $Interpreter.exec( Closure( $.cons( app, $.cons(local) ) ), env );
         case isClosure(app):
-            let fun = (app as Cons).head;
-            console.log("GOT", fun);
+            return $Interpreter.exec( Closure( $.cons( app, $.cons(local) ) ), env );
         default:
             throw new Error(`APPLY! ${$.pprint(expr)}`);
         }
@@ -353,9 +367,11 @@ console.log('compiled    :', $.pprint(compiled));
 let env = $Env.create();
 env = $Env.set( env, $.sym('+'), {
         type : 'NATIVE',
-        body : (args : List) : Value => {
-            console.log("HEY!!!!");
-            return $.num(1000010101);
+        body : (env : Cons) : Value => {
+            let [ lhs, rhs ] = $.List.flatten( $Env.get( env, $.sym('@_') ) as List );
+            if (lhs == undefined || !$.isNum(lhs)) throw new Error('Expected lhs to be Num');
+            if (rhs == undefined || !$.isNum(rhs)) throw new Error('Expected rhs to be Num');
+            return $.num(lhs.value + rhs.value);
         }
     }
 );
