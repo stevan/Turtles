@@ -434,16 +434,11 @@ const $Interpreter = {
 
         switch (true) {
         case ($.isNative(app) || $.isLambda(app)):
-            let params = $List.flatten(app.params);
-            let evaled = $List.flatten(args);
-
-            if ($.isCons(params[0] as Value)) {
-                params = $List.flatten( params[0] as List );
-            }
 
             LOG(d, ` BIND > params: ${$.pprint(app.params)} with args:${$.pprint(args)}`);
-
-            let local = env;
+            let local  = env;
+            let params = $List.flatten(app.params);
+            let evaled = $List.flatten(args);
             while (params.length > 0) {
                 let p = params.shift() as Sym;
                 let a = evaled.shift() as Value;
@@ -452,7 +447,6 @@ const $Interpreter = {
             }
             LOG(d, ` BIND < local: ${$Env.concise(local)}`);
 
-            //console.log(`!!! GOT ABS !!! ${$.pprint(app)} args: ${$.pprint(args)} env: ${$.pprint(local)}`);
             return $Interpreter.exec( Closure( $.cons( app, $.cons(local) ) ), env, d+1 );
         default:
             throw new Error(`APPLY! ${$.pprint(expr)}`);
