@@ -71,18 +71,18 @@ const $ = {
         case $.isCons(v): return v.head;
         case $.isPair(v): return v.first;
         default:
-            throw new Error(`Can only call (tail) on Cons/Pair not ${$.pprint(v)}`);
+            throw new Error(`Can only call (first) on Cons/Pair not ${$.pprint(v)}`);
         }
-    }
+    },
 
     second : (v : Value) : Value => {
         switch (true) {
         case $.isCons(v): return $.first(v.tail);
         case $.isPair(v): return v.second;
         default:
-            throw new Error(`Can only call (tail) on Cons/Pair not ${$.pprint(v)}`);
+            throw new Error(`Can only call (second) on Cons/Pair not ${$.pprint(v)}`);
         }
-    }
+    },
 
     // expect native args ...
 
@@ -218,9 +218,6 @@ const $List = {
         return list;
     },
 
-    first  : (l : List) : Value => $.isNil(l) ? l : l.head,
-    second : (l : List) : Value => $.isNil(l) ? l : $List.first(l.tail),
-
     flatten : (l : List) : Value[] => $.isNil(l) ? [] : [ l.head, ...$List.flatten(l.tail) ],
     length  : (l : List) : number  => $.isNil(l) ? 0  : 1 + $List.length(l.tail),
 
@@ -258,8 +255,8 @@ const $Compiler = {
                     //console.log('LAMBDA  :', $.pprint(e));
                     let form = $.tail(e);
                     return Lambda( $.lambda(
-                        $.head(form) as List,
-                        $.cons( $Compiler.compile($List.second(form)) )
+                        $.first(form) as List,
+                        $.cons($Compiler.compile( $.second(form)))
                     ) );
                 }
             default:
@@ -307,17 +304,19 @@ const $Env = {
     create : (bindings : List = $.nil()) : Cons => $.cons($.sym(Tags.Env), bindings),
 
     set : (env : Cons, symbol : Sym, value : Value) : Cons => {
-        return $Env.create( $.cons( $.pair( symbol, value ), env.tail ) )
+        return $Env.create(
+            $.cons(
+                $.pair( symbol, value ),
+                env.tail
+            )
+        )
     },
 
     get : (env : Cons, symbol : Sym) : Value => {
         let bind = $List.find( env.tail, (b) => {
-            if (!($.isPair(b) && $.isSym(b.first))) throw new Error('Expected pair!');
-            return b.first.ident == symbol.ident;
+            return symbol.ident == ($.first(b) as Sym).ident;
         });
-
-        if ($.isPair(bind)) return bind.second;
-        return bind;
+        return $.second(bind);
     },
 
     init : () : Cons => {
@@ -348,9 +347,9 @@ const DUMP  = (v : Value) : string => {
     switch (true) {
     case isEnv(v)     : return $Env.concise(v);
     case isClosure(v) :
-        let tag  = $List.first(v);
-        let body = $List.second(v) as Cons;
-        return `[ ${$.pprint(tag)} ${$.pprint($List.first(body))} @ ${$Env.concise($List.second(body))} ]`;
+        let tag  = $.first(v);
+        let body = $.second(v) as Cons;
+        return `[ ${$.pprint(tag)} ${$.pprint($.first(body))} @ ${$Env.concise($.second(body))} ]`;
     default:
         return $.pprint(v);
     }
