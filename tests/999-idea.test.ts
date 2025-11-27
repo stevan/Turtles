@@ -147,76 +147,59 @@ const $ = {
 // Interpeter AST
 // -----------------------------------------------------------------------------
 
-type Tag    = Sym
-type Tagged = Cons
-
 const Tags = {
-    Env     : $.sym('`env'),
-    Val     : $.sym('`val'),
-    Var     : $.sym('`var'),
-    Bind    : $.sym('`bind'),
-    Apply   : $.sym('`apply'),
-    Lambda  : $.sym('`lambda'),
-    Closure : $.sym('`closure'),
+    Env     : '`env',
+    Val     : '`val',
+    Var     : '`var',
+    Bind    : '`bind',
+    Apply   : '`apply',
+    Lambda  : '`lambda',
+    Closure : '`closure',
 }
 
-const isTag = (t : Value) : t is Tag => $.isSym(t) && (t.ident == '`var'
-                                                    || t.ident == '`val'
-                                                    || t.ident == '`bind'
-                                                    || t.ident == '`apply'
-                                                    || t.ident == '`lambda'
-                                                    || t.ident == '`closure');
+const isTag = (tag : Sym) : boolean => {
+    return tag.ident == '`env'
+        || tag.ident == '`val'
+        || tag.ident == '`var'
+        || tag.ident == '`bind'
+        || tag.ident == '`apply'
+        || tag.ident == '`lambda'
+        || tag.ident == '`closure'
+}
 
+const hasTag = (v : Value, tag : string) : boolean => {
+    return $.isCons(v) && $.isSym(v.head) && v.head.ident == tag;
+}
 
-const isTagged    = (v : Value)            : v is Tagged => $.isCons(v) && isTag(v.head);
-const isNotTagged = (v : Value)            : v is Value  => !isTagged(v);
-const hasTag      = (v : Value, tag : Tag) : v is Tagged => isTagged(v) && $.isSym(v.head) && v.head.ident == tag.ident;
+const isEnv     = (v : Value) : v is Cons => hasTag(v, Tags.Env);
+const isVal     = (v : Value) : v is Cons => hasTag(v, Tags.Val);
+const isVar     = (v : Value) : v is Cons => hasTag(v, Tags.Var);
+const isBind    = (v : Value) : v is Cons => hasTag(v, Tags.Bind);
+const isApply   = (v : Value) : v is Cons => hasTag(v, Tags.Apply);
+const isLambda  = (v : Value) : v is Cons => hasTag(v, Tags.Lambda);
+const isClosure = (v : Value) : v is Cons => hasTag(v, Tags.Closure);
 
-const tagged = (tag : Tag, tail : List = $.nil()) : Cons => $.cons(tag, tail);
-
-// ...
-
-// -----------------------------------------------------------------------------
-
-type Env     = Tagged
-type Val     = Tagged
-type Var     = Tagged
-type Bind    = Tagged
-type Apply   = Tagged
-type Lambda  = Tagged
-type Closure = Tagged
+const Val     = (value    : Value) : Cons => $.cons($.sym(Tags.Val),     $.cons(value));
+const Var     = (symbol   : Sym)   : Cons => $.cons($.sym(Tags.Var),     $.cons(symbol));
+const Bind    = (symbol   : Sym)   : Cons => $.cons($.sym(Tags.Bind),    $.cons(symbol));
+const Lambda  = (func     : List)  : Cons => $.cons($.sym(Tags.Lambda),  $.cons(func));
+const Apply   = (call     : List)  : Cons => $.cons($.sym(Tags.Apply),   $.cons(call));
+const Closure = (capture  : List)  : Cons => $.cons($.sym(Tags.Closure), $.cons(capture));
 
 const $Env = {
-    create : (bindings : List = $.nil()) : Env => tagged(Tags.Env, bindings),
+    create : (bindings : List = $.nil()) : Cons => $.cons($.sym(Tags.Env), bindings),
 
-    set : (env : Env, symbol : Sym, value : Value) : Env => {
+    set : (env : Cons, symbol : Sym, value : Value) : Cons => {
         return $Env.create( $.cons( $.pair( symbol, value ), env.tail ) )
     },
 
-    get : (env : Env, symbol : Sym) : Value => {
+    get : (env : Cons, symbol : Sym) : Value => {
         return $.List.find( env.tail, (b) => {
             if (!($.isPair(b) && $.isSym(b.first))) throw new Error('Expected pair!');
             return b.first.ident == symbol.ident;
         })
     },
 }
-
-// -----------------------------------------------------------------------------
-
-const isEnv     = (v : Value) : v is Env     => hasTag(v, Tags.Env);
-const isVal     = (v : Value) : v is Val     => hasTag(v, Tags.Val);
-const isVar     = (v : Value) : v is Var     => hasTag(v, Tags.Var);
-const isBind    = (v : Value) : v is Bind    => hasTag(v, Tags.Bind);
-const isApply   = (v : Value) : v is Apply   => hasTag(v, Tags.Apply);
-const isLambda  = (v : Value) : v is Lambda  => hasTag(v, Tags.Lambda);
-const isClosure = (v : Value) : v is Closure => hasTag(v, Tags.Closure);
-
-const Val     = (value    : Value)               : Val     => tagged(Tags.Val,     $.cons(value));
-const Var     = (symbol   : Sym)                 : Var     => tagged(Tags.Var,     $.cons(symbol));
-const Bind    = (symbol   : Sym)                 : Bind    => tagged(Tags.Bind,    $.cons(symbol));
-const Lambda  = (params   : List,   body : List) : Lambda  => tagged(Tags.Lambda,  $.cons(params, $.cons(body)));
-const Apply   = (func     : Value,  args : List) : Apply   => tagged(Tags.Apply,   $.cons(func,   $.cons(args)));
-const Closure = (lambda   : Tagged, env  : Env)  : Closure => tagged(Tags.Closure, $.cons(lambda, $.cons(env)));
 
 const $Compiler = {
     compile : (e : Value) : List => {
@@ -232,8 +215,10 @@ const $Compiler = {
                     //console.log('LAMBDA  :', $.pprint(e));
                     let form = e.tail as Cons;
                     return Lambda(
-                        $.List.map(form.head as List, (p) => Bind(p as Sym)),
-                        $Compiler.compile( (form.tail as Cons).head ) as List
+                        $.cons(
+                            $.List.map(form.head as List, (p) => Bind(p as Sym)),
+                            $.cons($Compiler.compile( (form.tail as Cons).head ) as List)
+                        )
                     );
                 }
             default:
@@ -242,7 +227,12 @@ const $Compiler = {
                 //console.log('HEAD-is   :', $.pprint(head));
                 if (isVar(head) || isLambda(head)) {
                     //console.log('APPLY   :', $.pprint(e));
-                    return Apply(head, $.List.map(e.tail, (a) => $Compiler.compile(a)));
+                    return Apply(
+                        $.cons(
+                            head,
+                            $.List.map(e.tail, (a) => $Compiler.compile(a))
+                        )
+                    );
                 } else {
                     //console.log('LIST   :', $.pprint(e));
                     let tail = e.tail;
@@ -259,18 +249,109 @@ const $Compiler = {
     },
 }
 
+/*
 
+(`apply (
+    (`lambda (
+        ((`bind y) (`bind x))
+        (`apply ( (`var +) (`var y) (`var x) ) )
+    ))
+    (`val 20)
+    (`val 10)
+))
+
+*/
+
+const $Interpreter = {
+
+    exec : (expr : Value, env : Cons) : Value => {
+        console.log(`EXEC  | ${$.pprint(expr)}`);
+        switch (true) {
+        case $.isCons(expr):
+            let tag = expr.head;
+            if ($.isSym(tag) && isTag(tag)) {
+                let body = expr.tail;
+                if (!$.isCons(body)) throw new Error(`Expected Body List for Tag:${$.pprint(tag)} got ${$.pprint(body)}`);
+                let arg = body.head;
+                console.log(`TAG   + ${$.pprint(tag)} -> ${$.pprint(arg)}`);
+                switch (tag.ident) {
+                case Tags.Apply : return $Interpreter.evaluate( arg, env );
+                case Tags.Val   : return arg;
+                case Tags.Var   : return $Interpreter.evaluate( arg, env );
+                default:
+                    throw new Error(`TODO - ${$.pprint(expr)}`)
+                }
+            } else {
+                return $Interpreter.evaluate( expr, env );
+            }
+        default:
+            throw new Error(`RUN! ${JSON.stringify(expr)}`);
+        }
+    },
+
+    evaluate : (expr : Value, env : Cons) : Value => {
+        console.log(`EVAL  | ${$.pprint(expr)}`);
+        switch (true) {
+        case $.isSym(expr)  : return $Env.get( env, expr );
+        case $.isAtom(expr) : return expr;
+        case $.isPair(expr) : return expr;
+        case $.isNil(expr)  : return expr;
+        case $.isCons(expr) :
+            let head = $Interpreter.exec( expr.head, env ) as List;
+            if ($.isNil(expr.tail)) {
+                return $.cons( head );
+            } else {
+                return $.cons(
+                    head,
+                    $Interpreter.exec( expr.tail, env ) as List
+                );
+            }
+        default:
+            throw new Error(`EVAL! ${JSON.stringify(expr)}`);
+        }
+    },
+
+    apply : (expr : Cons, env : Cons) : Value => {
+        console.log(`APPLY | ${$.pprint(expr)}`);
+        let app = $Interpreter.exec( expr.head, env );
+        switch (true) {
+        case isLambda(app):
+            return Closure( $.cons( app, $.cons(env) ) );
+        case isClosure(app):
+            let fun = (app as Cons).head;
+            console.log("GOT", fun);
+        default:
+            throw new Error(`APPLY! ${JSON.stringify(expr)}`);
+        }
+    },
+}
+
+// -----------------------------------------------------------------------------
 
 let source = `
-    ((lambda (x y) (+ x y)) 10 20)
+    (+ 10 20)
 `;
+console.log(`source :[\n${source}\n]`);
 
 let parsed = $Parser.parse(source);
-console.log('parsed :', $.pprint(parsed));
+console.log('parsed      :', $.pprint(parsed));
 
 let compiled = $Compiler.compile(parsed);
-console.log('compiled :', $.pprint(compiled));
+console.log('compiled    :', $.pprint(compiled));
 //console.log('compiled :', JSON.stringify(compiled, null, 4));
+
+let env = $Env.create();
+env = $Env.set( env, $.sym('+'), $.num(10000) );
+console.log('environment :', $.pprint(env));
+
+console.group('... run');
+let result = $Interpreter.exec( compiled, env );
+console.groupEnd();
+
+console.log('executed    : ', $.pprint(result));
+//console.log('executed :', JSON.stringify(result, null, 4));
+
+
 
 
 
@@ -282,21 +363,6 @@ console.log('compiled :', $.pprint(compiled));
 // let tree = parse('(lambda (x y) (+ x y))');
 // console.log('DEPARSE', $.pprint(tree));
 // console.log('PARSED', JSON.stringify(tree, null, 4));
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 /*
 
