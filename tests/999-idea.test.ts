@@ -5,16 +5,15 @@
 
 type NativeFunc = (env : Cons) => Value;
 
+type Native = { type : 'NATIVE', params : List, body : NativeFunc }
+type Lambda = { type : 'LAMBDA', params : List, body : List }
+
 type Bool = { type : 'BOOL', value : boolean }
 type Num  = { type : 'NUM',  value : number  }
 type Str  = { type : 'STR',  value : string  }
 type Sym  = { type : 'SYM',  ident : string  }
 
-// runtime values ...
-type Err    = { type : 'ERROR', msg : Str, expr : Value }
-type Native = { type : 'NATIVE', params : List, body : NativeFunc }
-
-type Atom = Bool | Num | Str | Native | Err
+type Atom = Bool | Num | Str | Native | Lambda
 
 type Pair = { type : 'PAIR', first : Value, second : Value }
 
@@ -38,7 +37,8 @@ const $ = {
     isNum    : (v : Value) : v is Num     => $.typeOf(v) == 'NUM',
     isStr    : (v : Value) : v is Str     => $.typeOf(v) == 'STR',
     isNative : (v : Value) : v is Native  => $.typeOf(v) == 'NATIVE',
-    isAtom   : (v : Value) : v is Atom    => $.isBool(v) || $.isNum(v) || $.isStr(v) || $.isNative(v),
+    isLambda : (v : Value) : v is Lambda  => $.typeOf(v) == 'LAMBDA',
+    isAtom   : (v : Value) : v is Atom    => $.isBool(v) || $.isNum(v) || $.isStr(v) || $.isNative(v) || $.isLambda(v),
 
     isSym   : (v : Value) : v is Sym  => $.typeOf(v) == 'SYM',
     isPair  : (v : Value) : v is Pair => $.typeOf(v) == 'PAIR',
@@ -63,13 +63,12 @@ const $ = {
     sym  : (ident : string)  : Sym  => { return { type : 'SYM',  ident } },
 
     // builtins
-    native : (params : List, body : NativeFunc) : Native {
+    native : (params : List, body : NativeFunc) : Native => {
         return { type : 'NATIVE', params, body }
     },
 
-    // errors
-    err : (msg : string, expr : Expr) : Err => {
-        return { type : 'ERROR', msg : $.str(msg), expr }
+    lambda : (params : List, body : List) : Lambda => {
+        return { type : 'LAMBDA', params, body }
     },
 
     pprint : (v : Value) : string => {
@@ -82,9 +81,16 @@ const $ = {
         case $.isSym(v)   : return v.ident;
         case $.isPair(v)  : return `(${$.pprint(v.first)} : ${$.pprint(v.second)})`;
         case $.isNative(v): return `&:native`;
+        case $.isLambda(v): return `(lambda ${
+            $List.flatten(v.params).map((e) => $.pprint(e)).join(' ')
+        } ${
+            $List.flatten(v.body).map((e) => $.pprint(e)).join(' ')
+        })`;
         case $.isCons(v)  : return $.isNil(v.tail)
             ? `(${$.pprint(v.head)})`
-            : `(${$.pprint(v.head)} ${$List.flatten(v.tail).map((e) => $.pprint(e)).join(' ')})`;
+            : `(${$.pprint(v.head)} ${
+                    $List.flatten(v.tail).map((e) => $.pprint(e)).join(' ')
+            })`;
         default: throw new Error(`Unknown value type (${JSON.stringify(v)})`);
         }
     }
@@ -168,15 +174,15 @@ const isApply   = (v : Value) : v is Cons => hasTag(v, Tags.Apply);
 const isLambda  = (v : Value) : v is Cons => hasTag(v, Tags.Lambda);
 const isClosure = (v : Value) : v is Cons => hasTag(v, Tags.Closure);
 
-const Val     = (value    : Value) : Cons => $.cons($.sym(Tags.Val),     $.cons(value));
-const Var     = (symbol   : Sym)   : Cons => $.cons($.sym(Tags.Var),     $.cons(symbol));
-const Bind    = (symbol   : Sym)   : Cons => $.cons($.sym(Tags.Bind),    $.cons(symbol));
-const Lambda  = (func     : List)  : Cons => $.cons($.sym(Tags.Lambda),  $.cons(func));
-const Apply   = (call     : List)  : Cons => $.cons($.sym(Tags.Apply),   $.cons(call));
-const Closure = (capture  : List)  : Cons => $.cons($.sym(Tags.Closure), $.cons(capture));
+const Val     = (value    : Value)  : Cons => $.cons($.sym(Tags.Val),     $.cons(value));
+const Var     = (symbol   : Sym)    : Cons => $.cons($.sym(Tags.Var),     $.cons(symbol));
+const Bind    = (symbol   : Sym)    : Cons => $.cons($.sym(Tags.Bind),    $.cons(symbol));
+const Lambda  = (func     : Lambda) : Cons => $.cons($.sym(Tags.Lambda),  $.cons(func));
+const Apply   = (call     : List)   : Cons => $.cons($.sym(Tags.Apply),   $.cons(call));
+const Closure = (capture  : List)   : Cons => $.cons($.sym(Tags.Closure), $.cons(capture));
 
     // Lists
-const List = {
+const $List = {
     create : (...args : Value[]) : List => {
         let list : List = $.nil();
         while (args.length > 0) {
@@ -186,12 +192,12 @@ const List = {
     },
 
     head : (l : Value) : Value => {
-        if ($.isNil(l)) return $.err('Can only call (head) on Cons', l);
+        if (!$.isCons(l)) throw new Error(`Can only call (head) on Cons not ${$.pprint(l)}`);
         return l.head;
     },
 
     tail : (l : Value) : List  => {
-        if (!$.isCons(l)) return $.err('Can only call (tail) on Cons', l);
+        if (!$.isCons(l)) throw new Error(`Can only call (tail) on Cons not ${$.pprint(l)}`);
         return l.tail;
     },
 
@@ -234,7 +240,7 @@ const $Env = {
 }
 
 const $Compiler = {
-    compile : (e : Value) : List => {
+    compile : (e : Value) : Value => {
         //console.log('COMPILE :', $.pprint(e));
         switch (true) {
         case $.isSym(e)  : return Var(e);
@@ -245,13 +251,16 @@ const $Compiler = {
             case $.isSym(e.head):
                 if (e.head.ident == 'lambda') {
                     //console.log('LAMBDA  :', $.pprint(e));
-                    let form = $.List.tail( e );
-                    return Lambda(
+                    let form = $List.tail( e );
+                    return Lambda( $.lambda(
+                        $.cons( $List.head( form ) ),
+                        // compile the lambda body
                         $.cons(
-                            $List.map(form.head as List, (p) => Bind(p as Sym)),
-                            $.cons($Compiler.compile( (form.tail as Cons).head ) as List)
+                            $Compiler.compile(
+                                $List.head($List.tail(form))
+                            )
                         )
-                    );
+                    ) );
                 }
             default:
                 //console.log('CHECK???? :', $.pprint(e));
@@ -271,7 +280,7 @@ const $Compiler = {
                     if ($.isNil(tail)) {
                         return $.cons(head);
                     } else {
-                        return $.cons(head, $Compiler.compile(tail))
+                        return $.cons(head, $Compiler.compile(tail) as List)
                     }
                 }
             }
@@ -281,19 +290,6 @@ const $Compiler = {
     },
 }
 
-/*
-
-(`apply (
-    (`lambda (
-        ((`bind y) (`bind x))
-        (`apply ( (`var +) (`var y) (`var x) ) )
-    ))
-    (`val 20)
-    (`val 10)
-))
-
-*/
-
 const $Interpreter = {
 
     exec : (expr : Value, env : Cons) : Value => {
@@ -302,20 +298,27 @@ const $Interpreter = {
         case $.isCons(expr):
             let tag = expr.head;
             if ($.isSym(tag) && isTag(tag)) {
-                let body = expr.tail;
-                if (!$.isCons(body)) throw new Error(`Expected Body List for Tag:${$.pprint(tag)} got ${$.pprint(body)}`);
-                let arg = body.head;
-                console.log(`  TAG + ${$.pprint(tag)} -> ${$.pprint(arg)}`);
+                let body = $List.head(expr.tail);
+                console.log(`  TAG + ${$.pprint(tag)} -> ${$.pprint(body)}`);
                 switch (tag.ident) {
-                case Tags.Apply   : return $Interpreter.apply( $Interpreter.evaluate( arg as Cons, env ) as Cons, env );
-                case Tags.Val     : return arg;
-                case Tags.Var     : return $Interpreter.evaluate( arg, env );
+                case Tags.Val     : return body;
+                case Tags.Var     : return $Interpreter.evaluate( body, env );
+                case Tags.Apply   :
+                    return $Interpreter.apply(
+                        $Interpreter.evaluate( body, env ),
+                        env
+                    );
+                case Tags.Lambda  : return body;
                 case Tags.Closure :
-                    let abs   = (arg as Cons).head;
-                    let local = ((arg as Cons).tail as Cons).head;
-                    if ($.isNative(abs)) {
+                    let abs   = $List.head(body);
+                    let local = $List.head($List.tail(body));
+                    switch (true) {
+                    case $.isNative(abs):
                         return abs.body( local as Cons );
-                    } else {
+                    case $.isLambda(abs):
+                        console.log(`<> EXEC LAMBDA ==> ${$.pprint($List.head(abs.body))} env: ${$.pprint(local)}`);
+                        return $Interpreter.exec( $List.head(abs.body), local as Cons );
+                    default:
                         throw new Error(`CLOSURE TODO - ${$.pprint(expr)}`)
                     }
                 default:
@@ -338,7 +341,7 @@ const $Interpreter = {
         case $.isPair(expr) : return expr;
         case $.isNil(expr)  : return expr;
         case $.isCons(expr) :
-            let head = $Interpreter.exec( expr.head, env ) as List;
+            let head = $Interpreter.exec( expr.head, env );
             if ($.isNil(expr.tail)) {
                 return $.cons( head );
             } else {
@@ -352,22 +355,37 @@ const $Interpreter = {
         }
     },
 
-    apply : (expr : Cons, env : Cons) : Value => {
+    apply : (expr : Value, env : Cons) : Value => {
         console.log(`APPLY | ${$.pprint(expr)}`);
-        let app  = expr.head;
-        let args = expr.tail;
+        let app    = $List.head(expr);
+        let args   = $List.tail(expr);
 
-        let local = env;
-        if (!$.isNil(args)) {
-            local = $Env.set( env, $.sym('@_'), args );
+        if (isClosure(app)) {
+            console.log(`!!! GOT CLOSURE !!! ${$.pprint(app)} args: ${$.pprint(args)} env: ${$.pprint(env)}`);
+            return $Interpreter.exec( Closure( $.cons( app, $.cons(env) ) ), env );
         }
 
         switch (true) {
-        case $.isNative(app):
-            return $Interpreter.exec( Closure( $.cons( app, $.cons(local) ) ), env );
-        case isLambda(app):
-            return $Interpreter.exec( Closure( $.cons( app, $.cons(local) ) ), env );
-        case isClosure(app):
+        case ($.isNative(app) || $.isLambda(app)):
+            let params = $List.flatten(app.params);
+            let evaled = $List.flatten(args);
+
+            if ($.isCons(params[0] as Value)) {
+                params = $List.flatten( params[0] as List );
+            }
+
+            console.log('PARAMS!!!!!!!!!!!!!', params);
+
+            let local = env;
+            while (params.length > 0) {
+                let p = params.shift() as Sym;
+                let a = evaled.shift() as Value;
+                console.log(`setting ${$.pprint(p)} to ${$.pprint(a)}`);
+                local = $Env.set( local, p, a );
+                console.log(`local is ${$.pprint(local)}`);
+            }
+
+            console.log(`!!! GOT ABS !!! ${$.pprint(app)} args: ${$.pprint(args)} env: ${$.pprint(local)}`);
             return $Interpreter.exec( Closure( $.cons( app, $.cons(local) ) ), env );
         default:
             throw new Error(`APPLY! ${$.pprint(expr)}`);
@@ -378,7 +396,7 @@ const $Interpreter = {
 // -----------------------------------------------------------------------------
 
 let source = `
-    (+ 10 (+ 5 15))
+    ((lambda (x y) (+ x y)) 10 20)
 `;
 console.log(`source :[\n${source}\n]`);
 
@@ -390,15 +408,16 @@ console.log('compiled    :', $.pprint(compiled));
 //console.log('compiled :', JSON.stringify(compiled, null, 4));
 
 let env = $Env.create();
-env = $Env.set( env, $.sym('+'), {
-        type : 'NATIVE',
-        body : (env : Cons) : Value => {
-            let [ lhs, rhs ] = $List.flatten( $Env.get( env, $.sym('@_') ) as List );
-            if (lhs == undefined || !$.isNum(lhs)) throw new Error('Expected lhs to be Num');
-            if (rhs == undefined || !$.isNum(rhs)) throw new Error('Expected rhs to be Num');
+env = $Env.set( env, $.sym('+'), $.native(
+        $.cons( $.sym('lhs'), $.cons( $.sym('rhs') ) ),
+        (env : Cons) : Value => {
+            let lhs = $Env.get( env, $.sym('lhs') );
+            let rhs = $Env.get( env, $.sym('rhs') );
+            if (!$.isNum(lhs)) throw new Error('Expected lhs to be Num');
+            if (!$.isNum(rhs)) throw new Error('Expected rhs to be Num');
             return $.num(lhs.value + rhs.value);
         }
-    }
+    )
 );
 console.log('environment :', $.pprint(env));
 
