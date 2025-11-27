@@ -66,6 +66,24 @@ const $ = {
         return l.tail;
     },
 
+    first : (v : Value) : Value => {
+        switch (true) {
+        case $.isCons(v): return v.head;
+        case $.isPair(v): return v.first;
+        default:
+            throw new Error(`Can only call (tail) on Cons/Pair not ${$.pprint(v)}`);
+        }
+    }
+
+    second : (v : Value) : Value => {
+        switch (true) {
+        case $.isCons(v): return $.first(v.tail);
+        case $.isPair(v): return v.second;
+        default:
+            throw new Error(`Can only call (tail) on Cons/Pair not ${$.pprint(v)}`);
+        }
+    }
+
     // expect native args ...
 
     bool : (value : boolean) : Bool => { return { type : 'BOOL', value } },
