@@ -3,14 +3,18 @@
 // Types
 // -----------------------------------------------------------------------------
 
-type Native = { type : 'NATIVE', body : (env : Cons) => Value }
+type NativeFunc = (env : Cons) => Value;
 
 type Bool = { type : 'BOOL', value : boolean }
 type Num  = { type : 'NUM',  value : number  }
 type Str  = { type : 'STR',  value : string  }
 type Sym  = { type : 'SYM',  ident : string  }
 
-type Atom = Bool | Num | Str | Native
+// runtime values ...
+type Err    = { type : 'ERROR', msg : Str, expr : Value }
+type Native = { type : 'NATIVE', params : List, body : NativeFunc }
+
+type Atom = Bool | Num | Str | Native | Err
 
 type Pair = { type : 'PAIR', first : Value, second : Value }
 
@@ -25,6 +29,69 @@ type Value = Atom | Sym | Pair | List
 // Core Runtime
 // -----------------------------------------------------------------------------
 
+const $ = {
+    typeOf : (v : Value) : string => v.type,
+
+    isTrue   : (v : Value) : v is Bool    => $.isBool(v) && v.value == true,
+    isFalse  : (v : Value) : v is Bool    => $.isBool(v) && v.value == false,
+    isBool   : (v : Value) : v is Bool    => $.typeOf(v) == 'BOOL',
+    isNum    : (v : Value) : v is Num     => $.typeOf(v) == 'NUM',
+    isStr    : (v : Value) : v is Str     => $.typeOf(v) == 'STR',
+    isNative : (v : Value) : v is Native  => $.typeOf(v) == 'NATIVE',
+    isAtom   : (v : Value) : v is Atom    => $.isBool(v) || $.isNum(v) || $.isStr(v) || $.isNative(v),
+
+    isSym   : (v : Value) : v is Sym  => $.typeOf(v) == 'SYM',
+    isPair  : (v : Value) : v is Pair => $.typeOf(v) == 'PAIR',
+    isNil   : (v : Value) : v is Nil  => $.typeOf(v) == 'NIL',
+    isCons  : (v : Value) : v is Cons => $.typeOf(v) == 'CONS',
+    isList  : (v : Value) : v is List => $.isNil(v) || $.isCons(v),
+
+    pair : (first : Value, second : Value) : Pair => {
+        return { type : 'PAIR', first, second }
+    },
+
+    nil    : () : Nil => { return { type : 'NIL'} },
+    cons   : (head : Value, tail : List = $.nil()) : Cons => {
+        return { type : 'CONS', head, tail }
+    },
+
+    // expect native args ...
+
+    bool : (value : boolean) : Bool => { return { type : 'BOOL', value } },
+    num  : (value : number)  : Num  => { return { type : 'NUM',  value } },
+    str  : (value : string)  : Str  => { return { type : 'STR',  value } },
+    sym  : (ident : string)  : Sym  => { return { type : 'SYM',  ident } },
+
+    // builtins
+    native : (params : List, body : NativeFunc) : Native {
+        return { type : 'NATIVE', params, body }
+    },
+
+    // errors
+    err : (msg : string, expr : Expr) : Err => {
+        return { type : 'ERROR', msg : $.str(msg), expr }
+    },
+
+    pprint : (v : Value) : string => {
+        switch (true) {
+        case $.isNil(v)   : return '()';
+        case $.isTrue(v)  : return '#t';
+        case $.isFalse(v) : return '#f';
+        case $.isNum(v)   : return v.value.toString();
+        case $.isStr(v)   : return `"${v.value}"`;
+        case $.isSym(v)   : return v.ident;
+        case $.isPair(v)  : return `(${$.pprint(v.first)} : ${$.pprint(v.second)})`;
+        case $.isNative(v): return `&:native`;
+        case $.isCons(v)  : return $.isNil(v.tail)
+            ? `(${$.pprint(v.head)})`
+            : `(${$.pprint(v.head)} ${$List.flatten(v.tail).map((e) => $.pprint(e)).join(' ')})`;
+        default: throw new Error(`Unknown value type (${JSON.stringify(v)})`);
+        }
+    }
+}
+
+// parser ...
+
 type ParseExpr = Value | ParseExpr[];
 
 const SPLITTER = /'(?:[^'\\]|\\.)*'|[()]|[^\s()']+/g
@@ -32,7 +99,7 @@ const SPLITTER = /'(?:[^'\\]|\\.)*'|[()]|[^\s()']+/g
 const $Parser = {
 
     tokenize : (source : string) : List =>
-        $.List.create(...((source.match(SPLITTER) ?? []).map((t) => $.str(t)))),
+        $List.create(...((source.match(SPLITTER) ?? []).map((t) => $.str(t)))),
 
     parse : (source : string) : Value => {
         const fastTokenize = (src : string) : string[] => src.match(SPLITTER) ?? []
@@ -58,92 +125,10 @@ const $Parser = {
         }
 
         const buildTree = (expr : ParseExpr) : Value  =>
-            (Array.isArray(expr)) ? $.List.create( ...expr.map(buildTree) ) : expr;
+            (Array.isArray(expr)) ? $List.create( ...expr.map(buildTree) ) : expr;
 
         let [ expr, rest ] = parseTokens( fastTokenize( source ) );
         return buildTree( expr );
-    }
-}
-
-const $ = {
-    typeOf : (v : Value) : string => v.type,
-
-    isTrue   : (v : Value) : v is Bool    => $.isBool(v) && v.value == true,
-    isFalse  : (v : Value) : v is Bool    => $.isBool(v) && v.value == false,
-    isBool   : (v : Value) : v is Bool    => $.typeOf(v) == 'BOOL',
-    isNum    : (v : Value) : v is Num     => $.typeOf(v) == 'NUM',
-    isStr    : (v : Value) : v is Str     => $.typeOf(v) == 'STR',
-    isNative : (v : Value) : v is Native  => $.typeOf(v) == 'NATIVE',
-    isAtom   : (v : Value) : v is Atom    => $.isBool(v) || $.isNum(v) || $.isStr(v) || $.isNative(v),
-
-    isSym   : (v : Value) : v is Sym  => $.typeOf(v) == 'SYM',
-    isPair  : (v : Value) : v is Pair => $.typeOf(v) == 'PAIR',
-    isNil   : (v : Value) : v is Nil  => $.typeOf(v) == 'NIL',
-    isCons  : (v : Value) : v is Cons => $.typeOf(v) == 'CONS',
-    isList  : (v : Value) : v is List => $.isNil(v) || $.isCons(v),
-
-    bool : (value : boolean) : Bool => { return { type : 'BOOL', value } },
-    num  : (value : number)  : Num  => { return { type : 'NUM',  value } },
-    str  : (value : string)  : Str  => { return { type : 'STR',  value } },
-    sym  : (ident : string)  : Sym  => { return { type : 'SYM',  ident } },
-
-    pair : (first : Value, second : Value) : Pair => {
-        return { type : 'PAIR', first, second }
-    },
-
-    nil    : () : Nil => { return { type : 'NIL'} },
-    cons   : (head : Value, tail : List = $.nil()) : Cons => {
-        return { type : 'CONS', head, tail }
-    },
-
-    // Lists
-    List : {
-        create : (...args : Value[]) : List => {
-            let list : List = $.nil();
-            while (args.length > 0) {
-                list = $.cons( args.pop() as Value, list );
-            }
-            return list;
-        },
-
-        head : (l : Cons) : Value => l.head,
-        tail : (l : Cons) : List  => l.tail,
-
-        flatten : (l : List) : Value[] => $.isNil(l) ? [] : [ l.head, ...$.List.flatten(l.tail) ],
-        length  : (l : List) : number  => $.isNil(l) ? 0  : 1 + $.List.length(l.tail),
-
-        reduce : (l : List, f : (i : Value, acc : List) => List, acc : List) : List =>
-            $.isNil(l)
-                ? acc
-                : $.List.reduce( l.tail, f, f( l.head, acc ) ),
-
-        map : (l : List, f : (i : Value) => Value) : List =>
-            $.List.reduce(l, (i, acc) => $.cons(f(i), acc), $.nil()),
-
-        grep : (l : List, f : (i : Value) => boolean) : List =>
-            $.List.reduce(l, (i, acc) => f(i) ? acc : $.cons(i, acc), $.nil()),
-
-        find : (l : List, f : (i : Value) => boolean) : Value =>
-            $.isNil(l)
-                ? $.nil()
-                : f(l.head) ? l.head : $.List.find( l.tail, f ),
-    },
-
-    pprint : (v : Value) : string => {
-        switch (true) {
-        case $.isNil(v)   : return '()';
-        case $.isTrue(v)  : return '#t';
-        case $.isFalse(v) : return '#f';
-        case $.isNum(v)   : return v.value.toString();
-        case $.isStr(v)   : return `"${v.value}"`;
-        case $.isSym(v)   : return v.ident;
-        case $.isPair(v)  : return `(${$.pprint(v.first)} : ${$.pprint(v.second)})`;
-        case $.isNative(v): return `&:native`;
-        case $.isCons(v)  : return $.isNil(v.tail)
-            ? `(${$.pprint(v.head)})`
-            : `(${$.pprint(v.head)} ${$.List.flatten(v.tail).map((e) => $.pprint(e)).join(' ')})`;
-        default: throw new Error(`Unknown value type (${JSON.stringify(v)})`);
-        }
     }
 }
 
@@ -190,6 +175,46 @@ const Lambda  = (func     : List)  : Cons => $.cons($.sym(Tags.Lambda),  $.cons(
 const Apply   = (call     : List)  : Cons => $.cons($.sym(Tags.Apply),   $.cons(call));
 const Closure = (capture  : List)  : Cons => $.cons($.sym(Tags.Closure), $.cons(capture));
 
+    // Lists
+const List = {
+    create : (...args : Value[]) : List => {
+        let list : List = $.nil();
+        while (args.length > 0) {
+            list = $.cons( args.pop() as Value, list );
+        }
+        return list;
+    },
+
+    head : (l : Value) : Value => {
+        if ($.isNil(l)) return $.err('Can only call (head) on Cons', l);
+        return l.head;
+    },
+
+    tail : (l : Value) : List  => {
+        if (!$.isCons(l)) return $.err('Can only call (tail) on Cons', l);
+        return l.tail;
+    },
+
+    flatten : (l : List) : Value[] => $.isNil(l) ? [] : [ l.head, ...$List.flatten(l.tail) ],
+    length  : (l : List) : number  => $.isNil(l) ? 0  : 1 + $List.length(l.tail),
+
+    reduce : (l : List, f : (i : Value, acc : List) => List, acc : List) : List =>
+        $.isNil(l)
+            ? acc
+            : $List.reduce( l.tail, f, f( l.head, acc ) ),
+
+    map : (l : List, f : (i : Value) => Value) : List =>
+        $List.reduce(l, (i, acc) => $.cons(f(i), acc), $.nil()),
+
+    grep : (l : List, f : (i : Value) => boolean) : List =>
+        $List.reduce(l, (i, acc) => f(i) ? acc : $.cons(i, acc), $.nil()),
+
+    find : (l : List, f : (i : Value) => boolean) : Value =>
+        $.isNil(l)
+            ? $.nil()
+            : f(l.head) ? l.head : $List.find( l.tail, f ),
+};
+
 const $Env = {
     create : (bindings : List = $.nil()) : Cons => $.cons($.sym(Tags.Env), bindings),
 
@@ -198,7 +223,7 @@ const $Env = {
     },
 
     get : (env : Cons, symbol : Sym) : Value => {
-        let bind = $.List.find( env.tail, (b) => {
+        let bind = $List.find( env.tail, (b) => {
             if (!($.isPair(b) && $.isSym(b.first))) throw new Error('Expected pair!');
             return b.first.ident == symbol.ident;
         });
@@ -220,10 +245,10 @@ const $Compiler = {
             case $.isSym(e.head):
                 if (e.head.ident == 'lambda') {
                     //console.log('LAMBDA  :', $.pprint(e));
-                    let form = e.tail as Cons;
+                    let form = $.List.tail( e );
                     return Lambda(
                         $.cons(
-                            $.List.map(form.head as List, (p) => Bind(p as Sym)),
+                            $List.map(form.head as List, (p) => Bind(p as Sym)),
                             $.cons($Compiler.compile( (form.tail as Cons).head ) as List)
                         )
                     );
@@ -237,7 +262,7 @@ const $Compiler = {
                     return Apply(
                         $.cons(
                             head,
-                            $.List.map(e.tail, (a) => $Compiler.compile(a))
+                            $List.map(e.tail, (a) => $Compiler.compile(a))
                         )
                     );
                 } else {
@@ -368,7 +393,7 @@ let env = $Env.create();
 env = $Env.set( env, $.sym('+'), {
         type : 'NATIVE',
         body : (env : Cons) : Value => {
-            let [ lhs, rhs ] = $.List.flatten( $Env.get( env, $.sym('@_') ) as List );
+            let [ lhs, rhs ] = $List.flatten( $Env.get( env, $.sym('@_') ) as List );
             if (lhs == undefined || !$.isNum(lhs)) throw new Error('Expected lhs to be Num');
             if (rhs == undefined || !$.isNum(rhs)) throw new Error('Expected rhs to be Num');
             return $.num(lhs.value + rhs.value);
