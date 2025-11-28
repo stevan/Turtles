@@ -12,6 +12,7 @@ enum CoreType {
     SYM    = 'SYM',
     NIL    = 'NIL',
     CONS   = 'CONS',
+    TAGGED = 'TAGGED',
     PAIR   = 'PAIR',
     NATIVE = 'NATIVE',
     LAMBDA = 'LAMBDA',
