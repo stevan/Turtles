@@ -24,7 +24,7 @@ interface Bool extends Atom  { type : CoreType.BOOL, value : boolean }
 interface Num  extends Atom  { type : CoreType.NUM,  value : number  }
 interface Str  extends Atom  { type : CoreType.STR,  value : string  }
 
-type NativeFunc = (env : Cons) => Value;
+type NativeFunc = (env : Environment) => Value;
 
 interface Callable extends Atom {}
 interface Native   extends Callable { type : CoreType.NATIVE,  params : List, body : NativeFunc }
@@ -35,6 +35,15 @@ interface Pair extends Value  { type : CoreType.PAIR, first : Value, second : Va
 
 interface Nil  extends Value { type : CoreType.NIL }
 interface Cons extends Value { type : CoreType.CONS, head : Value, tail : List }
+
+// Specialty lists
+
+// XXX - Can these be a fixed set of values?
+// Could we do something like ...
+// - Tagged<T> so that we can isolate a set of tags?
+// XXX - and can the Environment tag just be a fixed value?
+interface Tagged      extends Cons { head : Sym, tail : Cons }
+interface Environment extends Cons { head : Sym, tail : List }
 
 type List = Nil | Cons
 
@@ -60,6 +69,8 @@ namespace $ {
     export const isNil   = (v : Value) : v is Nil  => typeOf(v) == CoreType.NIL;
     export const isCons  = (v : Value) : v is Cons => typeOf(v) == CoreType.CONS;
     export const isList  = (v : Value) : v is List => isNil(v) || isCons(v);
+
+    export const isTagged = (v : Value) : v is Tagged => isCons(v) && isSym(head(v));
 
     export const pair = (first : Value, second : Value) : Pair => {
         return { type : CoreType.PAIR, first, second }
@@ -106,12 +117,19 @@ namespace $ {
     export const sym  = (ident : string)  : Sym  => { return { type : CoreType.SYM,  ident } }
 
     // builtins
+
     export const native = (params : List, body : NativeFunc) : Native => {
         return { type : CoreType.NATIVE, params, body }
     }
 
     export const lambda = (params : List, body : List) : Lambda => {
         return { type : CoreType.LAMBDA, params, body }
+    }
+
+    // tagged lists
+
+    export const tag = (head : Sym, tail : Cons) : Tagged => {
+        return { type : CoreType.CONS, head, tail }
     }
 
     export const pprint = (v : Value) : string => {
@@ -170,6 +188,51 @@ namespace Lists {
         $.isNil(l)
             ? $.nil()
             : f(l.head) ? l.head : Lists.find( l.tail, f );
+}
+
+// environment ...
+
+namespace Env {
+
+    export const isEnv = (v : Value) : v is Environment =>
+        $.isCons(v) && $.isSym(v.head) && v.head.ident == '`Env';
+
+    export const create = (bindings : List = $.nil()) : Environment => {
+        return $.cons($.sym('`Env'), bindings) as Environment
+    }
+
+    export const set = (env : Environment, symbol : Sym, value : Value) : Environment => {
+        return create(
+            $.cons(
+                $.pair( symbol, value ),
+                $.tail(env)
+            )
+        )
+    }
+
+    export const get = (env : Environment, symbol : Sym) : Value => {
+        let bind = Lists.find( env.tail, (b) => {
+            return symbol.ident == ($.first(b) as Sym).ident;
+        });
+        return $.second(bind);
+    }
+
+    export const concise = (env : Value) : string => {
+        if (!isEnv(env)) throw new Error('Expected Env');
+        return `ENV % ${$.pprint(
+            Lists.grep($.tail(env), (e) => {
+                return $.isPair(e) && $.isSym(e.first) && $.isNative(e.second)
+            })
+        )}`;
+    }
+
+    export const pprint = (env : Value) : string => {
+        if (!isEnv(env)) throw new Error('Expected Env');
+        return `ENV % \n  ${
+            Lists.flatten($.tail(env)).map((e) => $.pprint(e)).join('\n  ')
+        }`;
+    }
+
 }
 
 // -----------------------------------------------------------------------------
@@ -261,6 +324,37 @@ namespace Parser {
         (Array.isArray(expr)) ? Lists.create( ...expr.map(buildTree) ) : expr;
 }
 
+
+// OpCodes
+
+enum Ops {
+    Val     = '`Val',
+    Var     = '`Var',
+    Apply   = '`Apply',
+    Lambda  = '`Lambda',
+    Closure = '`Closure',
+}
+
+const isOp = (tag : Sym) : boolean => {
+    return tag.ident == '`Val'
+        || tag.ident == '`Var'
+        || tag.ident == '`Apply'
+        || tag.ident == '`Lambda'
+        || tag.ident == '`Closure'
+}
+
+const isVal     = (v : Value) : v is Tagged => $.isTagged(v) && v.head.ident == Ops.Val;
+const isVar     = (v : Value) : v is Tagged => $.isTagged(v) && v.head.ident == Ops.Var;
+const isApply   = (v : Value) : v is Tagged => $.isTagged(v) && v.head.ident == Ops.Apply;
+const isLambda  = (v : Value) : v is Tagged => $.isTagged(v) && v.head.ident == Ops.Lambda;
+const isClosure = (v : Value) : v is Tagged => $.isTagged(v) && v.head.ident == Ops.Closure;
+
+const Val     = (value    : Value)  : Tagged => $.tag($.sym(Ops.Val),     $.cons(value));
+const Var     = (symbol   : Sym)    : Tagged => $.tag($.sym(Ops.Var),     $.cons(symbol));
+const Lambda  = (func     : Lambda) : Tagged => $.tag($.sym(Ops.Lambda),  $.cons(func));
+const Apply   = (call     : List)   : Tagged => $.tag($.sym(Ops.Apply),   $.cons(call));
+const Closure = (capture  : List)   : Tagged => $.tag($.sym(Ops.Closure), $.cons(capture));
+
 // compiler ...
 
 namespace Compiler {
@@ -310,110 +404,6 @@ namespace Compiler {
     }
 }
 
-// environment ...
-
-namespace Env {
-    export const isEnv = (v : Value) : v is Cons => hasTag(v, Tags.Env);
-
-    export const create = (bindings : List = $.nil()) : Cons =>
-        $.cons($.sym(Tags.Env), bindings);
-
-    export const set = (env : Cons, symbol : Sym, value : Value) : Cons => {
-        return create(
-            $.cons(
-                $.pair( symbol, value ),
-                env.tail
-            )
-        )
-    }
-
-    export const get = (env : Cons, symbol : Sym) : Value => {
-        let bind = Lists.find( env.tail, (b) => {
-            return symbol.ident == ($.first(b) as Sym).ident;
-        });
-        return $.second(bind);
-    }
-
-    export const init = () : Cons => {
-        let env = create();
-
-        env = set( env, $.sym('+'), liftNumericBinOp((n, m) => n + m));
-        env = set( env, $.sym('-'), liftNumericBinOp((n, m) => n - m));
-        env = set( env, $.sym('*'), liftNumericBinOp((n, m) => n * m));
-        env = set( env, $.sym('/'), liftNumericBinOp((n, m) => n / m));
-        env = set( env, $.sym('%'), liftNumericBinOp((n, m) => n % m));
-
-        return env;
-    }
-
-    export const concise = (env : Value) : string => {
-        if (!isEnv(env)) throw new Error('Expected Env');
-        return `${$.pprint($.head(env))} % ${$.pprint(
-            Lists.grep($.tail(env), (e) => {
-                return $.isPair(e) && $.isSym(e.first) && $.isNative(e.second)
-            })
-        )}`;
-    }
-
-    export const pprint = (env : Value) : string => {
-        if (!isEnv(env)) throw new Error('Expected Env');
-        return `${$.pprint($.head(env))} % \n  ${
-            Lists.flatten($.tail(env)).map((e) => $.pprint(e)).join('\n  ')
-        }`;
-    }
-
-    // utils ...
-
-    const liftNumericBinOp = (f : (n : number, m : number) => number) : Native => {
-        return $.native(
-            $.cons( $.sym('lhs'), $.cons( $.sym('rhs') ) ),
-            (env : Cons) : Value => {
-                let lhs = Env.get( env, $.sym('lhs') );
-                let rhs = Env.get( env, $.sym('rhs') );
-                if (!$.isNum(lhs)) throw new Error('Expected lhs to be Num');
-                if (!$.isNum(rhs)) throw new Error('Expected rhs to be Num');
-                return $.num( f(lhs.value, rhs.value) );
-            }
-        )
-    }
-}
-
-// Interpeter AST
-
-const Tags = {
-    Env     : '`Env',
-    Val     : '`Val',
-    Var     : '`Var',
-    Apply   : '`Apply',
-    Lambda  : '`Lambda',
-    Closure : '`Closure',
-}
-
-const isTag = (tag : Sym) : boolean => {
-    return tag.ident == '`Env'
-        || tag.ident == '`Val'
-        || tag.ident == '`Var'
-        || tag.ident == '`Apply'
-        || tag.ident == '`Lambda'
-        || tag.ident == '`Closure'
-}
-
-const hasTag = (v : Value, tag : string) : boolean => {
-    return $.isCons(v) && $.isSym(v.head) && v.head.ident == tag;
-}
-
-const isVal     = (v : Value) : v is Cons => hasTag(v, Tags.Val);
-const isVar     = (v : Value) : v is Cons => hasTag(v, Tags.Var);
-const isApply   = (v : Value) : v is Cons => hasTag(v, Tags.Apply);
-const isLambda  = (v : Value) : v is Cons => hasTag(v, Tags.Lambda);
-const isClosure = (v : Value) : v is Cons => hasTag(v, Tags.Closure);
-
-const Val     = (value    : Value)  : Cons => $.cons($.sym(Tags.Val),     $.cons(value));
-const Var     = (symbol   : Sym)    : Cons => $.cons($.sym(Tags.Var),     $.cons(symbol));
-const Lambda  = (func     : Lambda) : Cons => $.cons($.sym(Tags.Lambda),  $.cons(func));
-const Apply   = (call     : List)   : Cons => $.cons($.sym(Tags.Apply),   $.cons(call));
-const Closure = (capture  : List)   : Cons => $.cons($.sym(Tags.Closure), $.cons(capture));
-
 namespace Interpreter {
 
     export const run = (source : string) : Value => {
@@ -427,7 +417,7 @@ namespace Interpreter {
         FOOTER();
         LOG(0, `compiled : ${$.pprint(compiled)}`);
         HEADER('EXECUTE:');
-        let env = Env.init();
+        let env = createRootEnv();
         LOG(0, `environment : ${Env.pprint(env)}`);
         FOOTER();
         let result = exec( compiled, env );
@@ -438,47 +428,45 @@ namespace Interpreter {
         return result;
     }
 
-    export const exec = (expr : Value, env : Cons, d : number = 0) : Value => {
+    export const exec = (expr : Value, env : Environment, d : number = 0) : Value => {
         LOG(d, `EXEC  | ${DUMP(expr)}`);
         switch (true) {
-        case $.isCons(expr):
-            let tag = expr.head;
-            if ($.isSym(tag) && isTag(tag)) {
-                let body = $.head(expr.tail);
-                LOG(d, ` +TAG : ${$.pprint(tag)}`);
-                switch (tag.ident) {
-                case Tags.Val     : return body;
-                case Tags.Var     : return evaluate( body, env, d+1 );
-                case Tags.Apply   :
-                    return apply(
-                        evaluate( body, env, d+1 ), env, d+2
-                    );
-                case Tags.Lambda  : return body;
-                case Tags.Closure :
-                    let abs   = $.head(body);
-                    let local = $.head($.tail(body)) as Cons;
-                    switch (true) {
-                    case $.isNative(abs):
-                        return abs.body( local );
-                    case $.isLambda(abs):
-                        LOG(d, `LAMBDA ==> ${$.pprint($.head(abs.body))} env: ${Env.concise(local)}`);
-                        return exec( $.head(abs.body), local, d+1 );
-                    default:
-                        throw new Error(`CLOSURE TODO - ${$.pprint(expr)}`)
-                    }
+        case $.isTagged(expr):
+            let tag  = expr.head;
+            let body = $.head(expr.tail);
+            LOG(d, ` +TAG : ${$.pprint(tag)}`);
+            switch (tag.ident) {
+            case Ops.Val     : return body;
+            case Ops.Var     : return evaluate( body, env, d+1 );
+            case Ops.Apply   :
+                return apply(
+                    evaluate( body, env, d+1 ), env, d+2
+                );
+            case Ops.Lambda  : return body;
+            case Ops.Closure :
+                let abs   = $.head(body);
+                let local = $.head($.tail(body)) as Environment;
+                switch (true) {
+                case $.isNative(abs):
+                    return abs.body( local );
+                case $.isLambda(abs):
+                    LOG(d, `LAMBDA ==> ${$.pprint($.head(abs.body))} env: ${Env.concise(local)}`);
+                    return exec( $.head(abs.body), local, d+1 );
                 default:
-                    throw new Error(`TODO - ${$.pprint(expr)}`)
+                    throw new Error(`CLOSURE TODO - ${$.pprint(expr)}`)
                 }
-            } else {
-                LOG(d, ` LIST > ${$.pprint(expr)}`);
-                return evaluate( expr, env, d+1 );
+            default:
+                throw new Error(`TODO - ${$.pprint(expr)}`)
             }
+        case $.isCons(expr):
+            LOG(d, ` LIST > ${$.pprint(expr)}`);
+            return evaluate( expr, env, d+1 );
         default:
             throw new Error(`RUN! ${JSON.stringify(expr)}`);
         }
     }
 
-    export const evaluate = (expr : Value, env : Cons, d : number = 0) : Value => {
+    export const evaluate = (expr : Value, env : Environment, d : number = 0) : Value => {
         LOG(d, `EVAL  @ ${DUMP(expr)}`);
         switch (true) {
         case $.isSym(expr)  : return Env.get( env, expr );
@@ -500,7 +488,7 @@ namespace Interpreter {
         }
     }
 
-    export const apply = (expr : Value, env : Cons, d : number = 0) : Value => {
+    export const apply = (expr : Value, env : Environment, d : number = 0) : Value => {
         LOG(d, `APPLY | ${DUMP(expr)}`);
         let app    = $.head(expr);
         let args   = $.tail(expr);
@@ -529,12 +517,40 @@ namespace Interpreter {
             throw new Error(`APPLY! ${$.pprint(expr)}`);
         }
     }
+
+    export const createRootEnv = () : Environment => {
+        let env = Env.create();
+
+        env = Env.set( env, $.sym('+'), liftNumericBinOp((n, m) => n + m));
+        env = Env.set( env, $.sym('-'), liftNumericBinOp((n, m) => n - m));
+        env = Env.set( env, $.sym('*'), liftNumericBinOp((n, m) => n * m));
+        env = Env.set( env, $.sym('/'), liftNumericBinOp((n, m) => n / m));
+        env = Env.set( env, $.sym('%'), liftNumericBinOp((n, m) => n % m));
+
+        return env;
+    }
+
+    // utils ...
+
+    const liftNumericBinOp = (f : (n : number, m : number) => number) : Native => {
+        return $.native(
+            $.cons( $.sym('lhs'), $.cons( $.sym('rhs') ) ),
+            (env : Environment) : Value => {
+                let lhs = Env.get( env, $.sym('lhs') );
+                let rhs = Env.get( env, $.sym('rhs') );
+                if (!$.isNum(lhs)) throw new Error('Expected lhs to be Num');
+                if (!$.isNum(rhs)) throw new Error('Expected rhs to be Num');
+                return $.num( f(lhs.value, rhs.value) );
+            }
+        )
+    }
 }
 
 // -----------------------------------------------------------------------------
 
+
 let result = Interpreter.run(`
-    ((lambda (x y) (+ x y)) 10 20)
+    ((lambda (x y) (+ x y)) 10 (* 4 5))
 `);
 
 
