@@ -37,16 +37,15 @@ interface Pair extends Value  { type : CoreType.PAIR, first : Value, second : Va
 interface Nil  extends Value { type : CoreType.NIL }
 interface Cons extends Value { type : CoreType.CONS, head : Value, tail : List }
 
+type List = Nil | Cons
+
 // Specialty lists
 
-// XXX - Can these be a fixed set of values?
-// Could we do something like ...
-// - Tagged<T> so that we can isolate a set of tags?
-// XXX - and can the Environment tag just be a fixed value?
-interface Tagged      extends Cons { head : Sym, tail : Cons }
-interface Environment extends Cons { head : Sym, tail : List }
+type EnvT = { type : CoreType.SYM, ident : '`Env' };
 
-type List = Nil | Cons
+interface Tagged<T extends Sym> extends Cons { head : T, tail : List }
+
+interface Environment extends Tagged<EnvT> { head : EnvT, tail : List }
 
 // -----------------------------------------------------------------------------
 // Core Namespace
@@ -71,7 +70,7 @@ namespace $ {
     export const isCons  = (v : Value) : v is Cons => typeOf(v) == CoreType.CONS;
     export const isList  = (v : Value) : v is List => isNil(v) || isCons(v);
 
-    export const isTagged = (v : Value) : v is Tagged => isCons(v) && isSym(head(v));
+    export const isTagged = (v : Value) : v is Tagged<Sym> => isCons(v) && isSym(head(v));
 
     export const pair = (first : Value, second : Value) : Pair => {
         return { type : CoreType.PAIR, first, second }
@@ -129,7 +128,7 @@ namespace $ {
 
     // tagged lists
 
-    export const tag = (head : Sym, tail : Cons) : Tagged => {
+    export const tag = (head : Sym, tail : Cons) : Tagged<Sym> => {
         return { type : CoreType.CONS, head, tail }
     }
 
@@ -160,7 +159,9 @@ namespace $ {
     }
 }
 
+// -----------------------------------------------------------------------------
 // lists ...
+// -----------------------------------------------------------------------------
 
 namespace Lists {
     export const create = (...args : Value[]) : List => {
@@ -191,7 +192,9 @@ namespace Lists {
             : f(l.head) ? l.head : Lists.find( l.tail, f );
 }
 
+// -----------------------------------------------------------------------------
 // environment ...
+// -----------------------------------------------------------------------------
 
 namespace Env {
 
@@ -286,7 +289,9 @@ const LOG   = (d : number, ...args : any[]) : void => {
     }
 }
 
+// -----------------------------------------------------------------------------
 // parser ...
+// -----------------------------------------------------------------------------
 
 namespace Parser {
 
@@ -325,8 +330,15 @@ namespace Parser {
         (Array.isArray(expr)) ? Lists.create( ...expr.map(buildTree) ) : expr;
 }
 
-
+// -----------------------------------------------------------------------------
 // OpCodes
+// -----------------------------------------------------------------------------
+
+type ValT     = { type : CoreType.SYM, ident : '`Val'     }
+type VarT     = { type : CoreType.SYM, ident : '`Var'     }
+type ApplyT   = { type : CoreType.SYM, ident : '`Apply'   }
+type LambdaT  = { type : CoreType.SYM, ident : '`Lambda'  }
+type ClosureT = { type : CoreType.SYM, ident : '`Closure' }
 
 enum Ops {
     Val     = '`Val',
@@ -344,19 +356,21 @@ const isOp = (tag : Sym) : boolean => {
         || tag.ident == '`Closure'
 }
 
-const isVal     = (v : Value) : v is Tagged => $.isTagged(v) && v.head.ident == Ops.Val;
-const isVar     = (v : Value) : v is Tagged => $.isTagged(v) && v.head.ident == Ops.Var;
-const isApply   = (v : Value) : v is Tagged => $.isTagged(v) && v.head.ident == Ops.Apply;
-const isLambda  = (v : Value) : v is Tagged => $.isTagged(v) && v.head.ident == Ops.Lambda;
-const isClosure = (v : Value) : v is Tagged => $.isTagged(v) && v.head.ident == Ops.Closure;
+const isVal     = (v : Value) : v is Tagged<ValT> => $.isTagged(v) && v.head.ident == Ops.Val;
+const isVar     = (v : Value) : v is Tagged<VarT> => $.isTagged(v) && v.head.ident == Ops.Var;
+const isApply   = (v : Value) : v is Tagged<ApplyT> => $.isTagged(v) && v.head.ident == Ops.Apply;
+const isLambda  = (v : Value) : v is Tagged<LambdaT> => $.isTagged(v) && v.head.ident == Ops.Lambda;
+const isClosure = (v : Value) : v is Tagged<ClosureT> => $.isTagged(v) && v.head.ident == Ops.Closure;
 
-const Val     = (value    : Value)  : Tagged => $.tag($.sym(Ops.Val),     $.cons(value));
-const Var     = (symbol   : Sym)    : Tagged => $.tag($.sym(Ops.Var),     $.cons(symbol));
-const Lambda  = (func     : Lambda) : Tagged => $.tag($.sym(Ops.Lambda),  $.cons(func));
-const Apply   = (call     : List)   : Tagged => $.tag($.sym(Ops.Apply),   $.cons(call));
-const Closure = (capture  : List)   : Tagged => $.tag($.sym(Ops.Closure), $.cons(capture));
+const Val     = (value    : Value)  : Tagged<ValT>     => $.tag($.sym(Ops.Val),     $.cons(value)) as Tagged<ValT>;
+const Var     = (symbol   : Sym)    : Tagged<VarT>     => $.tag($.sym(Ops.Var),     $.cons(symbol)) as Tagged<VarT>;
+const Lambda  = (func     : Lambda) : Tagged<LambdaT>  => $.tag($.sym(Ops.Lambda),  $.cons(func)) as Tagged<LambdaT>;
+const Apply   = (call     : List)   : Tagged<ApplyT>   => $.tag($.sym(Ops.Apply),   $.cons(call)) as Tagged<ApplyT>;
+const Closure = (capture  : List)   : Tagged<ClosureT> => $.tag($.sym(Ops.Closure), $.cons(capture)) as Tagged<ClosureT>;
 
+// -----------------------------------------------------------------------------
 // compiler ...
+// -----------------------------------------------------------------------------
 
 namespace Compiler {
     export const compile = (e : Value, d : number = 0) : Value => {
@@ -404,6 +418,10 @@ namespace Compiler {
         }
     }
 }
+
+// -----------------------------------------------------------------------------
+// Interpreter ...
+// -----------------------------------------------------------------------------
 
 namespace Interpreter {
 
