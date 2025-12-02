@@ -85,6 +85,6 @@ function show (value : Value) : void {
     return terminal.log(pprint(value));
 }
 
-let list = tokenize('(1 2 3)');
+let list = tokenize('(lambda (x y) (+ x y))');
 dump(list);
 show(list);
