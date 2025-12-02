@@ -40,10 +40,9 @@ interface Cons extends Value { type : CoreType.CONS, head : Value, tail : List }
 type List = Nil | Cons
 
 // Specialty lists
+interface Tagged<T extends Sym> extends Cons { head : T, tail : List }
 
 type EnvT = { type : CoreType.SYM, ident : '`Env' };
-
-interface Tagged<T extends Sym> extends Cons { head : T, tail : List }
 
 interface Environment extends Tagged<EnvT> { head : EnvT, tail : List }
 
@@ -356,16 +355,16 @@ const isOp = (tag : Sym) : boolean => {
         || tag.ident == '`Closure'
 }
 
-const isVal     = (v : Value) : v is Tagged<ValT> => $.isTagged(v) && v.head.ident == Ops.Val;
-const isVar     = (v : Value) : v is Tagged<VarT> => $.isTagged(v) && v.head.ident == Ops.Var;
-const isApply   = (v : Value) : v is Tagged<ApplyT> => $.isTagged(v) && v.head.ident == Ops.Apply;
-const isLambda  = (v : Value) : v is Tagged<LambdaT> => $.isTagged(v) && v.head.ident == Ops.Lambda;
+const isVal     = (v : Value) : v is Tagged<ValT>     => $.isTagged(v) && v.head.ident == Ops.Val;
+const isVar     = (v : Value) : v is Tagged<VarT>     => $.isTagged(v) && v.head.ident == Ops.Var;
+const isApply   = (v : Value) : v is Tagged<ApplyT>   => $.isTagged(v) && v.head.ident == Ops.Apply;
+const isLambda  = (v : Value) : v is Tagged<LambdaT>  => $.isTagged(v) && v.head.ident == Ops.Lambda;
 const isClosure = (v : Value) : v is Tagged<ClosureT> => $.isTagged(v) && v.head.ident == Ops.Closure;
 
-const Val     = (value    : Value)  : Tagged<ValT>     => $.tag($.sym(Ops.Val),     $.cons(value)) as Tagged<ValT>;
-const Var     = (symbol   : Sym)    : Tagged<VarT>     => $.tag($.sym(Ops.Var),     $.cons(symbol)) as Tagged<VarT>;
-const Lambda  = (func     : Lambda) : Tagged<LambdaT>  => $.tag($.sym(Ops.Lambda),  $.cons(func)) as Tagged<LambdaT>;
-const Apply   = (call     : List)   : Tagged<ApplyT>   => $.tag($.sym(Ops.Apply),   $.cons(call)) as Tagged<ApplyT>;
+const Val     = (value    : Value)  : Tagged<ValT>     => $.tag($.sym(Ops.Val),     $.cons(value))   as Tagged<ValT>;
+const Var     = (symbol   : Sym)    : Tagged<VarT>     => $.tag($.sym(Ops.Var),     $.cons(symbol))  as Tagged<VarT>;
+const Lambda  = (func     : Lambda) : Tagged<LambdaT>  => $.tag($.sym(Ops.Lambda),  $.cons(func))    as Tagged<LambdaT>;
+const Apply   = (call     : List)   : Tagged<ApplyT>   => $.tag($.sym(Ops.Apply),   $.cons(call))    as Tagged<ApplyT>;
 const Closure = (capture  : List)   : Tagged<ClosureT> => $.tag($.sym(Ops.Closure), $.cons(capture)) as Tagged<ClosureT>;
 
 // -----------------------------------------------------------------------------
