@@ -84,7 +84,10 @@ function __eq (lhs : Term, rhs : Term) : boolean {
             return __eq( lhs.env, rhs.env )
                 && __eq( lhs.abs, rhs.abs );
         case 'NATIVE':
-        case 'FEXPR' : throw new Error('TODO - Compare FEXPR/NATIVE');
+        case 'FEXPR' :
+            if (lhs.kind != rhs.kind) return false;
+            // dunno, best guess really, let JS sort it out
+            return lhs.body === rhs.body;
         default:
             throw new Error('Cannot eq a non-Term');
         }
