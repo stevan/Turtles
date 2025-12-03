@@ -4,6 +4,9 @@
 // Terms
 // -----------------------------------------------------------------------------
 
+type NativeFunc  = (arg : Term) => Term;
+type NativeFExpr = (arg : Term, env : Term) => Term;
+
 type Term = { kind : 'NIL' }
           | { kind : 'TRUE' }
           | { kind : 'FALSE' }
@@ -12,8 +15,8 @@ type Term = { kind : 'NIL' }
           | { kind : 'NUM', value : number }
           | { kind : 'PAIR',    fst : Term, snd : Term }
           | { kind : 'LAMBDA',  param : Term, body : Term }
-          | { kind : 'NATIVE',  body : (arg : Term) => Term }
-          | { kind : 'FEXPR',   body : (arg : Term, env : Term) => Term }
+          | { kind : 'NATIVE',  body : NativeFunc }
+          | { kind : 'FEXPR',   body : NativeFExpr }
           | { kind : 'CLOSURE', abs : Term, env : Term }
 
 function Nil   () : Term { return { kind : 'NIL'   } }
@@ -44,11 +47,11 @@ function Closure (abs : Term, env : Term) : Term {
     return { kind : 'CLOSURE', abs, env }
 }
 
-function Native (body : (arg : Term) => Term) : Term {
+function Native (body : NativeFunc) : Term {
     return { kind : 'NATIVE', body }
 }
 
-function FExpr (body : (arg : Term, env : Term) => Term) : Term {
+function FExpr (body : NativeFExpr) : Term {
     return { kind : 'FEXPR', body }
 }
 
@@ -173,7 +176,7 @@ function __deparse (t : Term) : string {
             return `(${__deparse(t.fst)} * ${__deparse(t.snd)})`;
         }
     case 'LAMBDA'  : return `(λ ${__deparse(t.param)} . ${__deparse(t.body)})`
-    case 'CLOSURE' : return `[ (${__deparse(t.env)}) ~ ${__deparse(t.abs)} ]`
+    case 'CLOSURE' : return `[ (${__showLocalEnv(t.env)}) ~ ${__deparse(t.abs)} ]`
     case 'NATIVE'  : return `&:native`
     case 'FEXPR'   : return `@:fexpr`
     default:
@@ -185,8 +188,25 @@ function __deparse (t : Term) : string {
 // Runtime
 // -----------------------------------------------------------------------------
 
+function __showEnv (env : Term) : string {
+    if (env.kind == 'NIL')  return '';
+    if (env.kind != 'PAIR') throw new Error(`showEnv(env) env must be a pair not ${env.kind}`);
+    let curr = env.fst;
+    if (curr.kind != 'PAIR') throw new Error(`Expected pair in Env not ${curr.kind}`);
+    return `${__deparse(curr.fst)}:${curr.snd.kind.substr(0, 3).toLowerCase()} ${__showEnv( env.snd )}`
+}
+
+function __showLocalEnv (env : Term) : string {
+    if (env.kind == 'NIL')  return '';
+    if (env.kind != 'PAIR') throw new Error(`showEnv(env) env must be a pair not ${env.kind}`);
+    let curr = env.fst;
+    if (curr.kind != 'PAIR') throw new Error(`Expected pair in Env not ${curr.kind}`);
+    if (curr.snd.kind == 'NATIVE' || curr.snd.kind == 'FEXPR') return '~';
+    return `${__deparse(curr.fst)}:${curr.snd.kind.substr(0, 3).toLowerCase()} ${__showEnv( env.snd )}`
+}
+
 function __lookup (t : Term, env : Term) : Term {
-    console.log(` /lookup/ ? ${__deparse(t)} IN ${__deparse(env)}`);
+    console.log(` /lookup/ ? ${__deparse(t)} IN ${__showEnv(env)}`);
     if (t.kind   != 'SYM')  throw new Error(`lookup(t, env) t must be a symbol not ${t.kind}`);
     if (env.kind == 'NIL')  throw new Error(`Cannot find ${__deparse(t)} in Env`);
     if (env.kind != 'PAIR') throw new Error(`lookup(t, env) env must be a pair not ${env.kind}`);
@@ -208,7 +228,7 @@ function __define (sym : Term, t : Term, env : Term) : Term {
 
 function __eval (t : Term, env : Term) : Term {
     console.log(`EVAL:${t.kind} ${__deparse(t)}`);
-    console.log('   %:ENV => ', __deparse(env));
+    console.log('   %:ENV => ', __showLocalEnv(env));
     switch (t.kind) {
     case 'NIL'     :
     case 'TRUE'    :
@@ -259,20 +279,68 @@ function __eval (t : Term, env : Term) : Term {
 function __initEnv () : Term {
     let env : Term = Nil();
 
-    env = __define(
-        Sym('+'), Native((arg : Term) : Term => {
-            console.log(`   >:CALL &:(+) w/ ${__deparse(arg)}`);
-            if (arg.kind != 'PAIR') throw new Error(`Expected Pair in &:(+) not(${arg.kind})`);
+    const liftComparisonBinOp = (op : string, f : (n : number | string, m : number | string) => boolean) : NativeFunc => {
+        return (arg : Term) : Term => {
+            console.log(`   >:CALL &:(${op}) w/ ${__deparse(arg)}`);
+            if (arg.kind != 'PAIR') throw new Error(`Expected Pair in &:(${op}) not(${arg.kind})`);
             let lhs = arg.fst;
             let rhs = arg.snd;
-            if (rhs.kind != 'PAIR') throw new Error(`Expected rhs to be Pair in &:(+) not(${rhs.kind})`);
+            if (rhs.kind != 'PAIR') throw new Error(`Expected rhs to be Pair in &:(${op}) not(${rhs.kind})`);
             rhs = rhs.fst;
-            if (lhs.kind != 'NUM') throw new Error(`Expected lhs to be Num in &:(+) not(${lhs.kind})`);
-            if (rhs.kind != 'NUM') throw new Error(`Expected rhs to be Num in &:(+) not(${rhs.kind})`);
-            return Num( lhs.value + rhs.value );
+            if (!(lhs.kind == 'NUM' || lhs.kind == 'STR')) throw new Error(`Expected lhs to be Num/Str in &:(${op}) not(${lhs.kind})`);
+            if (!(rhs.kind == 'NUM' || rhs.kind == 'STR')) throw new Error(`Expected rhs to be Num/Str in &:(${op}) not(${rhs.kind})`);
+            return f( lhs.value, rhs.value ) ? True() : False();
+        }
+    }
+
+    const liftNumericBinOp = (op : string, f : (n : number, m : number) => number) : NativeFunc => {
+        return (arg : Term) : Term => {
+            console.log(`   >:CALL &:(${op}) w/ ${__deparse(arg)}`);
+            if (arg.kind != 'PAIR') throw new Error(`Expected Pair in &:(${op}) not(${arg.kind})`);
+            let lhs = arg.fst;
+            let rhs = arg.snd;
+            if (rhs.kind != 'PAIR') throw new Error(`Expected rhs to be Pair in &:(${op}) not(${rhs.kind})`);
+            rhs = rhs.fst;
+            if (lhs.kind != 'NUM') throw new Error(`Expected lhs to be Num in &:(${op}) not(${lhs.kind})`);
+            if (rhs.kind != 'NUM') throw new Error(`Expected rhs to be Num in &:(${op}) not(${rhs.kind})`);
+            return Num( f( lhs.value, rhs.value ) );
+        }
+    }
+
+    env = __define(
+        Sym('=='), Native((arg : Term) : Term => {
+            console.log(`   >:CALL &:(==) w/ ${__deparse(arg)}`);
+            if (arg.kind != 'PAIR') throw new Error(`Expected Pair in &:(==) not(${arg.kind})`);
+            let lhs = arg.fst;
+            let rhs = arg.snd;
+            if (rhs.kind != 'PAIR') throw new Error(`Expected rhs to be Pair in &:(==) not(${rhs.kind})`);
+            return __eq( lhs, rhs.fst ) ? True() : False();
         }),
         env
     );
+
+    env = __define(
+        Sym('!='), Native((arg : Term) : Term => {
+            console.log(`   >:CALL &:(!=) w/ ${__deparse(arg)}`);
+            if (arg.kind != 'PAIR') throw new Error(`Expected Pair in &:(!=) not(${arg.kind})`);
+            let lhs = arg.fst;
+            let rhs = arg.snd;
+            if (rhs.kind != 'PAIR') throw new Error(`Expected rhs to be Pair in &:(!=) not(${rhs.kind})`);
+            return __eq( lhs, rhs.fst ) ? False() : True();
+        }),
+        env
+    );
+
+    env = __define( Sym('>'),  Native(liftComparisonBinOp('>',  (n, m) => n >  m)), env );
+    env = __define( Sym('>='), Native(liftComparisonBinOp('>=', (n, m) => n >= m)), env );
+    env = __define( Sym('<'),  Native(liftComparisonBinOp('<',  (n, m) => n <  m)), env );
+    env = __define( Sym('<='), Native(liftComparisonBinOp('<=', (n, m) => n <= m)), env );
+
+    env = __define( Sym('+'), Native(liftNumericBinOp('+', (n, m) => n + m)), env );
+    env = __define( Sym('-'), Native(liftNumericBinOp('-', (n, m) => n - m)), env );
+    env = __define( Sym('*'), Native(liftNumericBinOp('*', (n, m) => n * m)), env );
+    env = __define( Sym('/'), Native(liftNumericBinOp('/', (n, m) => n / m)), env );
+    env = __define( Sym('%'), Native(liftNumericBinOp('%', (n, m) => n % m)), env );
 
     env = __define(
         Sym('lambda'), FExpr((arg : Term, env : Term) : Term => {
@@ -296,7 +364,7 @@ let env = __initEnv();
 
 console.log(__deparse(__eval(__parse(`
 
-    (((lambda (x) (lambda (y) (+ x y))) 10) 20)
+    (== (((lambda (x) (lambda (y) (+ x y))) 10) 23) 30)
 
 `), env)));
 
