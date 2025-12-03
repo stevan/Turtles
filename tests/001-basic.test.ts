@@ -185,7 +185,7 @@ function __deparse (t : Term) : string {
 }
 
 // -----------------------------------------------------------------------------
-// Runtime
+// Environment
 // -----------------------------------------------------------------------------
 
 function __showEnv (env : Term) : string {
@@ -225,6 +225,11 @@ function __define (sym : Term, t : Term, env : Term) : Term {
     //if (env.kind != 'PAIR') throw new Error(`define(sym, t, env) env must be a pair not ${env.kind}`);
     return Env( sym, t, env );
 }
+
+// -----------------------------------------------------------------------------
+// Runtime
+// -----------------------------------------------------------------------------
+
 
 function __eval (t : Term, env : Term) : Term {
     console.log('-'.repeat(80));
