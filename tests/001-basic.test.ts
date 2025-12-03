@@ -5,7 +5,7 @@
 // -----------------------------------------------------------------------------
 
 type NativeFunc  = (arg : Term) => Term;
-type NativeFExpr = (arg : Term, env : Term) => Term;
+type NativeFExpr = (arg : Term, env : Term) => [ Term, Env ];
 
 type Term = { kind : 'NIL' }
           | { kind : 'TRUE' }
@@ -245,7 +245,7 @@ function __eval (t : Term, env : Term) : Term {
         let tail = t.snd;
         // FEXPRs
         if (head.kind == 'FEXPR') {
-            return __eval( head.body( tail, env ), env );
+            return __eval( ...(head.body( tail, env )) );
         }
 
         let call  : Term = head;
@@ -307,6 +307,7 @@ function __initEnv () : Term {
         }
     }
 
+    // equality for all ...
     env = __define(
         Sym('=='), Native((arg : Term) : Term => {
             console.log(`   >:CALL &:(==) w/ ${__deparse(arg)}`);
@@ -331,17 +332,20 @@ function __initEnv () : Term {
         env
     );
 
+    // just for strings and numbers
     env = __define( Sym('>'),  Native(liftComparisonBinOp('>',  (n, m) => n >  m)), env );
     env = __define( Sym('>='), Native(liftComparisonBinOp('>=', (n, m) => n >= m)), env );
     env = __define( Sym('<'),  Native(liftComparisonBinOp('<',  (n, m) => n <  m)), env );
     env = __define( Sym('<='), Native(liftComparisonBinOp('<=', (n, m) => n <= m)), env );
 
+    // just for numbers
     env = __define( Sym('+'), Native(liftNumericBinOp('+', (n, m) => n + m)), env );
     env = __define( Sym('-'), Native(liftNumericBinOp('-', (n, m) => n - m)), env );
     env = __define( Sym('*'), Native(liftNumericBinOp('*', (n, m) => n * m)), env );
     env = __define( Sym('/'), Native(liftNumericBinOp('/', (n, m) => n / m)), env );
     env = __define( Sym('%'), Native(liftNumericBinOp('%', (n, m) => n % m)), env );
 
+    // lambda special form
     env = __define(
         Sym('lambda'), FExpr((arg : Term, env : Term) : Term => {
             console.log(`   >:CALL @:(lambda) w/ ${__deparse(arg)}`);
@@ -350,7 +354,7 @@ function __initEnv () : Term {
             if (param.kind != 'PAIR') throw new Error(`Expected Pair as param in @:(lambda) not(${param.kind})`);
             let body  = arg.snd;
             if (body.kind != 'PAIR') throw new Error(`Expected Pair as body in @:(lambda) not(${body.kind})`);
-            return Lambda( param.fst, body.fst );
+            return [ Lambda( param.fst, body.fst ), env ];
         }),
         env
     );
