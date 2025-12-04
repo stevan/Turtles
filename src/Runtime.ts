@@ -27,6 +27,8 @@ export function evaluate (t : Core.Term, env : Core.Term, depth : number = 0) : 
     console.log(`${indent}EVAL:${t.kind} ${Parser.deparse(t)}`);
     console.log(`${indent}   %:ENV => `+Environment.showLocalEnv(env));
     switch (true) {
+    case Core.isClosure(t) :
+        throw new Error('NEVER HAPPENS! -- WHY???');
     case Core.isNil(t)     :
     case Core.isTrue(t)    :
     case Core.isFalse(t)   :
@@ -39,8 +41,6 @@ export function evaluate (t : Core.Term, env : Core.Term, depth : number = 0) : 
     case Core.isSym(t)     :
         console.log(`${indent} $ eval – looking up ${Parser.deparse(t)}`);
         return Environment.lookup( t, env, depth );
-    case Core.isClosure(t) :
-        throw new Error('NVER SHOULD HAPPEN! -- WHY???');
     case Core.isLambda(t)  :
         console.log(`${indent} $ eval – creating closure for ${t.kind}`);
         return Core.Closure( t, env );
@@ -53,10 +53,6 @@ export function evaluate (t : Core.Term, env : Core.Term, depth : number = 0) : 
         console.log(`${indent} $ eval – ${head.kind} ${Parser.deparse(head)}`);
 
         switch (true) {
-        case Core.isClosure(head):
-            // unpack closures
-            console.log(`${indent} $ eval – ^unpack Closure ~~ ${Parser.deparse(head)}`);
-            return apply( head.abs, evaluate( tail, env, depth + 1 ), head.env );
         case Core.isOperative(head):
             // FEXPRs
             console.log(`${indent} $ eval – ... Apply FExpr`);
@@ -64,7 +60,7 @@ export function evaluate (t : Core.Term, env : Core.Term, depth : number = 0) : 
             console.log(`${indent} $ eval – ... Apply FExpr got ${Parser.deparse(expr)} % ${Environment.showLocalEnv(local)}`);
             return evaluate( expr, local, depth + 1 );
         case Core.isApplicative(head):
-            return apply( head, evaluate( tail, env, depth + 1 ), env, depth + 1 );
+            return apply( head, evaluate( tail, env, depth + 1 ), depth + 1 );
         default:
             console.log(`${indent} $ eval – ... is Pair! ${Parser.deparse(head)}`);
             let rest = evaluate( tail, env, depth + 1 );
@@ -77,23 +73,29 @@ export function evaluate (t : Core.Term, env : Core.Term, depth : number = 0) : 
     }
 }
 
-export function apply (call : Core.Term, arg : Core.Term, env : Core.Term, depth : number = 0) : Core.Term {
+export function apply (call : Core.Term, arg : Core.Term, depth : number = 0) : Core.Term {
     let indent = (depth < 0) ? ' @@ ' : '  '.repeat(depth);
     console.log(`● [${depth.toString().padStart(3, (depth < 0) ? ' ' : '0')}] `+'–'.repeat(72));
     console.log(`${indent}APPLY:${call.kind} ${Parser.deparse(call)} <- ${Parser.deparse(arg)}`);
-    console.log(`${indent}   %:ENV => `+Environment.showLocalEnv(env));
-
     // run what we got ...
     switch (true) {
     case Core.isNative(call) :
-        console.log(`${indent} $ eval – ... Apply Native`);
+        console.log(`${indent} & apply – ... Apply Native`);
         return call.body( arg );
-    case Core.isLambda(call) :
-        console.log(`${indent} $ eval – ... Apply Lambda`);
-        let param = call.param;
-        if (!Core.isSym(param)) throw new Error(`Expected SYM for lambda param, but got ${param.kind}`);
-        if (!Core.isPair(arg))  throw new Error(`Expected PAIR for lambda arg, but got ${arg.kind}`);
-        return evaluate( call.body, Core.Env( param, arg.fst, env ), depth + 1 );
+    case Core.isClosure(call) :
+        // unpack closures
+        console.log(`${indent} & apply – ^unpack Closure ~~ ${Parser.deparse(call)}`);
+        console.log(`${indent} & apply – ... Apply Lambda`);
+        let lambda = call.abs;
+        if (!Core.isLambda(lambda)) throw new Error(`Expected LAMBDA for lambda, but got ${lambda.kind}`);
+
+        let param = lambda.param;
+        if (!Core.isSym(param))     throw new Error(`Expected SYM for lambda param, but got ${param.kind}`);
+        if (!Core.isPair(arg))      throw new Error(`Expected PAIR for lambda arg, but got ${arg.kind}`);
+
+        console.log(`${indent} w/%:ENV => `+Environment.showLocalEnv(call.env));
+
+        return evaluate( lambda.body, Core.Env( param, arg.fst, call.env ), depth + 1 );
     default:
         throw new Error(`WTF! ${JSON.stringify(call)}`);
     }

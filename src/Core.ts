@@ -21,7 +21,7 @@ export type CLOSURE = { kind : 'CLOSURE', abs : Term, env : Term }
 
 // Vau-style
 export type Operative   = FEXPR
-export type Applicative = LAMBDA | NATIVE
+export type Applicative = CLOSURE | NATIVE
 export type Callable    = Operative | Applicative
 
 export type Cons = NIL | PAIR
@@ -34,7 +34,7 @@ export type Term =
           | STR
           | NUM
           | PAIR
-          | CLOSURE
+          | LAMBDA
           | Callable
 
 export function Nil   () : NIL   { return { kind : 'NIL'   } }
@@ -98,7 +98,7 @@ export function isClosure (t : Term) : t is CLOSURE { return t.kind == 'CLOSURE'
 
 export function isOperative   (t : Term) : t is Operative   { return isFExpr(t) }
 export function isApplicative (t : Term) : t is Applicative {
-    return isLambda(t) || isNative(t) || isClosure(t)
+    return isNative(t) || isClosure(t)
 }
 
 export function isCallable (t : Term) : t is Callable {
