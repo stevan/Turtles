@@ -27,7 +27,38 @@ console.log('='.repeat(80)+"\n");
 
 /*
 
+((lambda (x y) (+ x y)) 10 (* 4 5))
+
 (((lambda (x) (lambda (y) (+ x y))) 10) 20)
+
+
+    (defun (add x y) (+ x y))
+    (add 10 20)
+
+    (defun (adder x) (lambda (y) (add x y)))
+
+    ((adder 16) 24)
+
+(defun factorial (n)
+    (if (== n 0)
+        (1)
+        (* n (factorial (- n 1)))))
+
+(defun even? (n) (cond ((== n 0) true) (else (odd? (- n 1)))))
+(defun odd? (n) (cond ((== n 0) false) (else (even? (- n 1)))))
+
+
+        `30`,
+        `(+ 10 20)`,
+        `(+ 10 (+ 10 10))`,
+        `(+ (* 2 5) 20)`,
+        `(+ (+ 5 5) (* 2 10))`,
+        `((lambda (x y) (+ x y)) 10 20)`,
+        `((lambda (x y) (+ x y)) (+ 5 5) 20)`,
+        `((lambda (x y) (+ x y)) 10 (* 2 10))`,
+        `((lambda (x y) (+ x y)) (+ 5 5) (* 2 10))`,
+        `(((lambda (x) (lambda (y) (+ x y))) 10) 20)`,
+
 
 */
 
