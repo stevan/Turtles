@@ -24,8 +24,6 @@ export type Operative   = FEXPR
 export type Applicative = CLOSURE | NATIVE
 export type Callable    = Operative | Applicative
 
-export type Cons = NIL | PAIR
-
 export type Term =
           | NIL
           | TRUE
@@ -71,10 +69,6 @@ export function Native (body : NativeFunc) : NATIVE {
 
 export function FExpr (body : NativeFExpr) : FEXPR {
     return { kind : 'FEXPR', body }
-}
-
-export function Env (sym : Term, val : Term, env : Term = Nil()) : Term {
-    return Pair(Pair(sym, val), env);
 }
 
 // -----------------------------------------------------------------------------

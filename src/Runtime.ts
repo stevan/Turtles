@@ -7,28 +7,12 @@ import * as Environment from './Environment'
 // Runtime
 // -----------------------------------------------------------------------------
 
-
-/*
-type Eval    = { op : 'EVAL', expr : Core.Term }
-type Just    = { op : 'JUST', expr : Core.Term }
-type Lookup  = { op : 'LKUP', sym  : Core.Sym }
-type Enclose = { op : 'NCLZ', abs : Core.Term, env : Core.Term }
-
-type Kont =
-        | Eval     // general entry point ...
-        | Just     // push a specific value
-        | Lookup   // lookup a symbol
-        | Enclose  // create a Closure
-*/
-
 export function evaluate (t : Core.Term, env : Core.Term, depth : number = 0) : Core.Term {
     let indent = (depth < 0) ? ' @@ ' : '  '.repeat(depth);
     console.log(`● [${depth.toString().padStart(3, (depth < 0) ? ' ' : '0')}] `+'–'.repeat(72));
     console.log(`${indent}EVAL:${t.kind} ${Parser.deparse(t)}`);
     console.log(`${indent}   %:ENV => `+Environment.showLocalEnv(env));
     switch (true) {
-    case Core.isClosure(t) :
-        throw new Error('NEVER HAPPENS! -- WHY???');
     case Core.isNil(t)     :
     case Core.isTrue(t)    :
     case Core.isFalse(t)   :
@@ -36,6 +20,7 @@ export function evaluate (t : Core.Term, env : Core.Term, depth : number = 0) : 
     case Core.isStr(t)     :
     case Core.isNative(t)  :
     case Core.isFExpr(t)   :
+    case Core.isClosure(t) :
         console.log(`${indent} $ eval – just ${t.kind}`);
         return t;
     case Core.isSym(t)     :
@@ -95,7 +80,7 @@ export function apply (call : Core.Term, arg : Core.Term, depth : number = 0) : 
 
         console.log(`${indent} w/%:ENV => `+Environment.showLocalEnv(call.env));
 
-        return evaluate( lambda.body, Core.Env( param, arg.fst, call.env ), depth + 1 );
+        return evaluate( lambda.body, Environment.Env( param, arg.fst, call.env ), depth + 1 );
     default:
         throw new Error(`WTF! ${JSON.stringify(call)}`);
     }
