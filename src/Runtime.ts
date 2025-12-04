@@ -8,6 +8,19 @@ import * as Environment from './Environment'
 // -----------------------------------------------------------------------------
 
 
+/*
+type Eval    = { op : 'EVAL', expr : Core.Term }
+type Just    = { op : 'JUST', expr : Core.Term }
+type Lookup  = { op : 'LKUP', sym  : Core.Sym }
+type Enclose = { op : 'NCLZ', abs : Core.Term, env : Core.Term }
+
+type Kont =
+        | Eval     // general entry point ...
+        | Just     // push a specific value
+        | Lookup   // lookup a symbol
+        | Enclose  // create a Closure
+*/
+
 export function evaluate (t : Core.Term, env : Core.Term, depth : number = 0) : Core.Term {
     let indent = (depth < 0) ? ' @@ ' : '  '.repeat(depth);
     console.log(`● [${depth.toString().padStart(3, (depth < 0) ? ' ' : '0')}] `+'–'.repeat(72));
@@ -27,54 +40,62 @@ export function evaluate (t : Core.Term, env : Core.Term, depth : number = 0) : 
         console.log(`${indent} $ eval – looking up ${Parser.deparse(t)}`);
         return Environment.lookup( t, env, depth );
     case Core.isClosure(t) :
+        throw new Error('NVER SHOULD HAPPEN! -- WHY???');
     case Core.isLambda(t)  :
         console.log(`${indent} $ eval – creating closure for ${t.kind}`);
         return Core.Closure( t, env );
     case Core.isPair(t)    :
         console.log(`${indent} $ eval – Apply or Pair? (${t.fst.kind} :: ${t.snd.kind})`);
         let head = evaluate( t.fst, env, depth + 1 );
+        let tail = t.snd;
 
         console.log(`◯ [${depth.toString().padStart(3, '0')}] `+'–'.repeat(72));
         console.log(`${indent} $ eval – ${head.kind} ${Parser.deparse(head)}`);
-        let tail = t.snd;
 
-        // FEXPRs
-        if (Core.isFExpr(head)) {
+        switch (true) {
+        case Core.isClosure(head):
+            // unpack closures
+            console.log(`${indent} $ eval – ^unpack Closure ~~ ${Parser.deparse(head)}`);
+            return apply( head.abs, evaluate( tail, env, depth + 1 ), head.env );
+        case Core.isOperative(head):
+            // FEXPRs
             console.log(`${indent} $ eval – ... Apply FExpr`);
             let [ expr, local ] = head.body( tail, env );
             console.log(`${indent} $ eval – ... Apply FExpr got ${Parser.deparse(expr)} % ${Environment.showLocalEnv(local)}`);
             return evaluate( expr, local, depth + 1 );
-        }
-
-        let call  : Core.Term = head;
-        let arg   : Core.Term = evaluate( tail, env, depth + 1 );
-        let local : Core.Term = env;
-
-        // unpack closures
-        if (Core.isClosure(call)) {
-            console.log(`${indent} $ eval – ... Apply Closure`);
-            console.log(`${indent}   ^unpack ~~ ${Parser.deparse(call)}`);
-            local = call.env;
-            call  = call.abs;
-        }
-
-        // run what we got ...
-        switch (true) {
-        case Core.isNative(call) :
-            console.log(`${indent} $ eval – ... Apply Native`);
-            return call.body( arg );
-        case Core.isLambda(call) :
-            console.log(`${indent} $ eval – ... Apply Lambda`);
-            let param = call.param;
-            if (!Core.isSym(param)) throw new Error(`Expected SYM for lambda param, but got ${param.kind}`);
-            if (!Core.isPair(arg))  throw new Error(`Expected PAIR for lambda arg, but got ${arg.kind}`);
-            return evaluate( call.body, Core.Env( param, arg.fst, local ), depth + 1 );
+        case Core.isApplicative(head):
+            return apply( head, evaluate( tail, env, depth + 1 ), env, depth + 1 );
         default:
-            console.log(`${indent} $ eval – ... is Pair! ${Parser.deparse(call)}`);
-            return Core.Pair( call, arg );
+            console.log(`${indent} $ eval – ... is Pair! ${Parser.deparse(head)}`);
+            let rest = evaluate( tail, env, depth + 1 );
+            console.log(`◯ [${depth.toString().padStart(3, '0')}] `+'–'.repeat(72));
+            console.log(`${indent} $ eval – Pair( fst: ${Parser.deparse(head)}, snd: <${rest.kind}> ${Parser.deparse(rest)} )`);
+            return Core.Pair( head, rest );
         }
     default:
         throw new Error('Cannot eval a non-Term');
+    }
+}
+
+export function apply (call : Core.Term, arg : Core.Term, env : Core.Term, depth : number = 0) : Core.Term {
+    let indent = (depth < 0) ? ' @@ ' : '  '.repeat(depth);
+    console.log(`● [${depth.toString().padStart(3, (depth < 0) ? ' ' : '0')}] `+'–'.repeat(72));
+    console.log(`${indent}APPLY:${call.kind} ${Parser.deparse(call)} <- ${Parser.deparse(arg)}`);
+    console.log(`${indent}   %:ENV => `+Environment.showLocalEnv(env));
+
+    // run what we got ...
+    switch (true) {
+    case Core.isNative(call) :
+        console.log(`${indent} $ eval – ... Apply Native`);
+        return call.body( arg );
+    case Core.isLambda(call) :
+        console.log(`${indent} $ eval – ... Apply Lambda`);
+        let param = call.param;
+        if (!Core.isSym(param)) throw new Error(`Expected SYM for lambda param, but got ${param.kind}`);
+        if (!Core.isPair(arg))  throw new Error(`Expected PAIR for lambda arg, but got ${arg.kind}`);
+        return evaluate( call.body, Core.Env( param, arg.fst, env ), depth + 1 );
+    default:
+        throw new Error(`WTF! ${JSON.stringify(call)}`);
     }
 }
 

@@ -19,17 +19,23 @@ export type NATIVE  = { kind : 'NATIVE',  body : NativeFunc }
 export type FEXPR   = { kind : 'FEXPR',   body : NativeFExpr }
 export type CLOSURE = { kind : 'CLOSURE', abs : Term, env : Term }
 
-export type Term = NIL
+// Vau-style
+export type Operative   = FEXPR
+export type Applicative = LAMBDA | NATIVE
+export type Callable    = Operative | Applicative
+
+export type Cons = NIL | PAIR
+
+export type Term =
+          | NIL
           | TRUE
           | FALSE
           | SYM
           | STR
           | NUM
           | PAIR
-          | LAMBDA
-          | NATIVE
-          | FEXPR
           | CLOSURE
+          | Callable
 
 export function Nil   () : NIL   { return { kind : 'NIL'   } }
 export function True  () : TRUE  { return { kind : 'TRUE'  } }
@@ -89,6 +95,15 @@ export function isLambda  (t : Term) : t is LAMBDA  { return t.kind == 'LAMBDA' 
 export function isNative  (t : Term) : t is NATIVE  { return t.kind == 'NATIVE'  }
 export function isFExpr   (t : Term) : t is FEXPR   { return t.kind == 'FEXPR'   }
 export function isClosure (t : Term) : t is CLOSURE { return t.kind == 'CLOSURE' }
+
+export function isOperative   (t : Term) : t is Operative   { return isFExpr(t) }
+export function isApplicative (t : Term) : t is Applicative {
+    return isLambda(t) || isNative(t) || isClosure(t)
+}
+
+export function isCallable (t : Term) : t is Callable {
+    return isOperative(t) || isApplicative(t)
+}
 
 export function isList (t : Term) : boolean {
     return isNil(t) || (isPair(t) && isList(t.snd))
