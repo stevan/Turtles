@@ -22,15 +22,19 @@ export function evaluate (t : Core.Term, env : Core.Term, depth : number = 0) : 
     case Core.isFExpr(t)   :
     case Core.isClosure(t) :
         console.log(`${indent} $ eval – just ${t.kind}`);
+        // Just( t )
         return t;
     case Core.isSym(t)     :
         console.log(`${indent} $ eval – looking up ${Parser.deparse(t)}`);
+        // Lookup( t )
         return Environment.lookup( t, env, depth );
     case Core.isLambda(t)  :
-        console.log(`${indent} $ eval – creating closure for ${t.kind}`);
+        console.log(`${indent} $ eval – capturing closure for ${t.kind}`);
+        // Capture( t, env )
         return Core.Closure( t, env );
     case Core.isPair(t)    :
         console.log(`${indent} $ eval – Apply or Pair? (${t.fst.kind} :: ${t.snd.kind})`);
+        // Cons( t )
         let head = evaluate( t.fst, env, depth + 1 );
         let tail = t.snd;
 
@@ -43,14 +47,17 @@ export function evaluate (t : Core.Term, env : Core.Term, depth : number = 0) : 
             console.log(`${indent} $ eval – ... Apply FExpr`);
             let [ expr, local ] = head.body( tail, env );
             console.log(`${indent} $ eval – ... Apply FExpr got ${Parser.deparse(expr)} % ${Environment.showLocalEnv(local)}`);
+            // Operate( head, tail )
             return evaluate( expr, local, depth + 1 );
         case Core.isApplicative(head):
+            // Apply( head, tail )
             return apply( head, evaluate( tail, env, depth + 1 ), depth + 1 );
         default:
             console.log(`${indent} $ eval – ... is Pair! ${Parser.deparse(head)}`);
             let rest = evaluate( tail, env, depth + 1 );
             console.log(`◯ [${depth.toString().padStart(3, '0')}] `+'–'.repeat(72));
             console.log(`${indent} $ eval – Pair( fst: ${Parser.deparse(head)}, snd: <${rest.kind}> ${Parser.deparse(rest)} )`);
+            // otherwise ...
             return Core.Pair( head, rest );
         }
     default:
