@@ -75,10 +75,6 @@ function Env (sym : Term, val : Term, env : Term = Nil()) : Term {
 // Core API
 // -----------------------------------------------------------------------------
 
-function __isSameKind (lhs : Term, rhs : Term) : boolean {
-    return lhs.kind == rhs.kind;
-}
-
 function __isNil   (t : Term) : t is NIL   { return t.kind == 'NIL'   }
 function __isTrue  (t : Term) : t is TRUE  { return t.kind == 'TRUE'  }
 function __isFalse (t : Term) : t is FALSE { return t.kind == 'FALSE' }
@@ -96,6 +92,14 @@ function __isClosure (t : Term) : t is CLOSURE { return t.kind == 'CLOSURE' }
 
 function __isList (t : Term) : boolean {
     return __isNil(t) || (__isPair(t) && __isList(t.snd))
+}
+
+function __makeList (...args : Term[]) : Term {
+    let list : Term = Nil();
+    while (args.length > 0) {
+        list = Pair( args.pop() as Term, list );
+    }
+    return list;
 }
 
 function __eq (lhs : Term, rhs : Term) : boolean {
@@ -130,14 +134,6 @@ function __eq (lhs : Term, rhs : Term) : boolean {
         }
     }
     return false;
-}
-
-function __makeList (...args : Term[]) : Term {
-    let list : Term = Nil();
-    while (args.length > 0) {
-        list = Pair( args.pop() as Term, list );
-    }
-    return list;
 }
 
 // -----------------------------------------------------------------------------
@@ -211,29 +207,29 @@ function __deparse (t : Term) : string {
 // -----------------------------------------------------------------------------
 
 function __showEnv (env : Term) : string {
-    if (__isNil(env))   return '';
-    if (!__isPair(env)) throw new Error(`showEnv(env) env must be a pair not ${env.kind}`);
+    if (__isNil(env))       return '';
+    if (!__isPair(env))     throw new Error(`showEnv(env) env must be a pair not ${env.kind}`);
+    if (!__isPair(env.fst)) throw new Error(`Expected pair in Env not ${env.fst.kind}`);
     let curr = env.fst;
-    if (!__isPair(curr)) throw new Error(`Expected pair in Env not ${curr.kind}`);
     return `${__deparse(curr.fst)}:${curr.snd.kind.substr(0, 4).toLowerCase()} ${__showEnv( env.snd )}`
 }
 
 function __showLocalEnv (env : Term) : string {
-    if (__isNil(env))   return '';
-    if (!__isPair(env)) throw new Error(`showEnv(env) env must be a pair not ${env.kind}`);
+    if (__isNil(env))       return '';
+    if (!__isPair(env))     throw new Error(`showEnv(env) env must be a pair not ${env.kind}`);
+    if (!__isPair(env.fst)) throw new Error(`Expected pair in Env not ${env.fst.kind}`);
     let curr = env.fst;
-    if (!__isPair(curr)) throw new Error(`Expected pair in Env not ${curr.kind}`);
     if (__isNative(curr.snd) || __isFExpr(curr.snd)) return '~';
     return `${__deparse(curr.fst)}:${curr.snd.kind.substr(0, 4).toLowerCase()} ${__showEnv( env.snd )}`
 }
 
 function __lookup (t : Term, env : Term) : Term {
+    if (__isNil(env))       throw new Error(`Cannot find ${__deparse(t)} in an empty Env`);
+    if (!__isPair(env))     throw new Error(`lookup(t, env) env must be a pair not ${env.kind}`);
+    if (!__isPair(env.fst)) throw new Error(`Expected pair in Env not ${env.fst.kind}`);
+    if (!__isSym(t))        throw new Error(`lookup(t, env) t must be a symbol not ${t.kind}`);
     console.log(` /lookup/ ? ${__deparse(t)} IN ${__showEnv(env)}`);
-    if (!__isSym(t))    throw new Error(`lookup(t, env) t must be a symbol not ${t.kind}`);
-    if (__isNil(env))   throw new Error(`Cannot find ${__deparse(t)} in Env`);
-    if (!__isPair(env)) throw new Error(`lookup(t, env) env must be a pair not ${env.kind}`);
     let curr = env.fst;
-    if (!__isPair(curr)) throw new Error(`Expected pair in Env not ${curr.kind}`);
     console.log(` /lookup/ ? ${__deparse(t)} EQ ${__deparse(curr.fst)}`);
     if (__eq(t, curr.fst)) {
         console.log(` !lookup! @ ${__deparse(t)} => ${__deparse(curr.snd)}`);
@@ -376,11 +372,11 @@ function __initEnv () : Term {
     env = __define(
         Sym('lambda'), FExpr((arg : Term, env : Term) : [ Term, Term ] => {
             console.log(`   >:CALL @:(lambda) w/ ${__deparse(arg)}`);
-            if (!__isPair(arg)) throw new Error(`Expected Pair as arg in @:(lambda) not(${arg.kind})`);
+            if (!__isPair(arg))     throw new Error(`Expected Pair as arg in @:(lambda) not(${arg.kind})`);
+            if (!__isPair(arg.fst)) throw new Error(`Expected Pair as param in @:(lambda) not(${arg.fst.kind})`);
+            if (!__isPair(arg.snd)) throw new Error(`Expected Pair as body in @:(lambda) not(${arg.snd.kind})`);
             let param = arg.fst;
-            if (!__isPair(param)) throw new Error(`Expected Pair as param in @:(lambda) not(${param.kind})`);
             let body  = arg.snd;
-            if (!__isPair(body)) throw new Error(`Expected Pair as body in @:(lambda) not(${body.kind})`);
             return [ Lambda( param.fst, body.fst ), env ];
         }),
         env
@@ -389,13 +385,13 @@ function __initEnv () : Term {
     env = __define(
         Sym('let'), FExpr((arg : Term, env : Term) : [ Term, Term ] => {
             console.log(`   >:CALL @:(let) w/ ${__deparse(arg)}`);
-            if (!__isPair(arg))   throw new Error(`Expected Pair as arg in @:(let) not(${arg.kind})`);
+            if (!__isPair(arg))     throw new Error(`Expected Pair as arg in @:(let) not(${arg.kind})`);
+            if (!__isPair(arg.fst)) throw new Error(`Expected Pair as bind in @:(let) not(${arg.fst.kind})`);
             let bind = arg.fst;
-            if (!__isPair(bind))  throw new Error(`Expected Pair as bind in @:(let) not(${bind.kind})`);
-            let sym = bind.fst;
-            if (!__isSym(sym))    throw new Error(`Expected Sym as bind/sym in @:(let) not(${sym.kind})`);
+            if (!__isSym(bind.fst))  throw new Error(`Expected Sym as bind/sym in @:(let) not(${bind.fst.kind})`);
+            if (!__isPair(bind.snd)) throw new Error(`Expected Pair as bind/value in @:(let) not(${bind.snd.kind})`);
+            let sym   = bind.fst;
             let value = bind.snd;
-            if (!__isPair(value)) throw new Error(`Expected Pair as bind/value in @:(let) not(${value.kind})`);
             let body  = arg.snd;
             if (!__isPair(body))  throw new Error(`Expected Pair as body in @:(let) not(${body.kind})`);
             return [ body.fst, __define( sym, value.fst, env ) ];
@@ -412,9 +408,9 @@ let env = __initEnv();
 
 console.log(__deparse(__eval(__parse(`
 
-    (let (x 10)
+    (let (x 2)
     (let (y 10)
-        (== x y)
+        ((lambda (x) (== y x)) (* 5 x))
     ))
 
 `), env)));
