@@ -8,7 +8,8 @@ import * as Parser from './Parser'
 
 
 export function Env (sym : Core.Term, val : Core.Term, env : Core.Term = Core.Nil()) : Core.Term {
-    return Core.Pair(Core.Pair(sym, val), env);
+    if (!Core.isCons(env)) throw new Error(`Env(syn, val, env) env must be a List not ${env.kind}`);
+    return Core.Cons(Core.Pair(sym, val), env);
 }
 
 export function isEmpty (env : Core.Term) : boolean {
@@ -16,15 +17,15 @@ export function isEmpty (env : Core.Term) : boolean {
 }
 
 export function head (env : Core.Term) : Core.PAIR {
-    if (!Core.isPair(env))     throw new Error(`first(env) env must be a pair not ${env.kind}`);
-    if (!Core.isPair(env.fst)) throw new Error(`Expected pair in Env not ${env.fst.kind}`);
-    return env.fst;
+    if (!Core.isList(env))      throw new Error(`first(env) env must be a pair not ${env.kind}`);
+    if (!Core.isPair(env.head)) throw new Error(`Expected pair in Env not ${env.head.kind}`);
+    return env.head;
 }
 
 export function tail (env : Core.Term) : Core.Term {
-    if (!Core.isPair(env))     throw new Error(`second(env) env must be a pair not ${env.kind}`);
-    if (!Core.isList(env.snd)) throw new Error(`Expected list in Env not ${env.snd.kind}`);
-    return env.snd;
+    if (!Core.isList(env))      throw new Error(`second(env) env must be a pair not ${env.kind}`);
+    if (!Core.isList(env.tail)) throw new Error(`Expected list in Env not ${env.tail.kind}`);
+    return env.tail;
 }
 
 export function lookup (t : Core.Term, env : Core.Term, depth : number = 0) : Core.Term {

@@ -13,7 +13,8 @@ export type FALSE   = { kind : 'FALSE' }
 export type SYM     = { kind : 'SYM', value : string }
 export type STR     = { kind : 'STR', value : string }
 export type NUM     = { kind : 'NUM', value : number }
-export type PAIR    = { kind : 'PAIR',    fst : Term, snd : Term }
+export type PAIR    = { kind : 'PAIR', fst  : Term, snd  : Term }
+export type LIST    = { kind : 'LIST', head : Term, tail : Cons }
 export type LAMBDA  = { kind : 'LAMBDA',  param : Term, body : Term }
 export type NATIVE  = { kind : 'NATIVE',  body : NativeFunc }
 export type FEXPR   = { kind : 'FEXPR',   body : NativeFExpr }
@@ -24,6 +25,8 @@ export type Operative   = FEXPR
 export type Applicative = CLOSURE | NATIVE
 export type Callable    = Operative | Applicative
 
+export type Cons = NIL | LIST
+
 export type Term =
           | NIL
           | TRUE
@@ -32,6 +35,7 @@ export type Term =
           | STR
           | NUM
           | PAIR
+          | LIST
           | LAMBDA
           | Callable
 
@@ -53,6 +57,10 @@ export function Num (value : number) : NUM {
 
 export function Pair (fst : Term, snd : Term) : PAIR {
     return { kind : 'PAIR', fst, snd }
+}
+
+export function Cons (head : Term, tail : Cons = Nil()) : LIST {
+    return { kind : 'LIST', head, tail }
 }
 
 export function Lambda (param : Term, body : Term) : LAMBDA {
@@ -84,6 +92,9 @@ export function isStr (t : Term) : t is STR { return t.kind == 'STR' }
 export function isSym (t : Term) : t is SYM { return t.kind == 'SYM' }
 
 export function isPair (t : Term) : t is PAIR { return t.kind == 'PAIR' }
+export function isList (t : Term) : t is LIST { return t.kind == 'LIST' }
+
+export function isCons (t : Term) : t is Cons { return isList(t) || isNil(t) }
 
 export function isLambda  (t : Term) : t is LAMBDA  { return t.kind == 'LAMBDA'  }
 export function isNative  (t : Term) : t is NATIVE  { return t.kind == 'NATIVE'  }
@@ -99,14 +110,10 @@ export function isCallable (t : Term) : t is Callable {
     return isOperative(t) || isApplicative(t)
 }
 
-export function isList (t : Term) : boolean {
-    return isNil(t) || (isPair(t) && isList(t.snd))
-}
-
-export function makeList (...args : Term[]) : Term {
+export function makeList (...args : Term[]) : Cons {
     let list : Term = Nil();
     while (args.length > 0) {
-        list = Pair( args.pop() as Term, list );
+        list = Cons( args.pop() as Term, list );
     }
     return list;
 }
@@ -126,6 +133,10 @@ export function equalTo (lhs : Term, rhs : Term) : boolean {
             if (lhs.kind != rhs.kind) return false;
             return equalTo( lhs.fst, rhs.fst )
                 && equalTo( lhs.snd, rhs.snd );
+        case isList(lhs)  :
+            if (lhs.kind != rhs.kind) return false;
+            return equalTo( lhs.head, rhs.head )
+                && equalTo( lhs.tail, rhs.tail );
         case isLambda(lhs):
             if (lhs.kind != rhs.kind) return false;
             return equalTo( lhs.param, rhs.param )

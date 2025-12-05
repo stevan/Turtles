@@ -41,26 +41,26 @@ export function parse (source : string) : Core.Term {
     return buildTree( expr );
 }
 
+export const deparseList = (l : Core.Cons) : string[] => {
+    switch (true) {
+    case Core.isNil(l)                        : return [];
+    case Core.isList(l) && Core.isNil(l.tail) : return [ deparse(l.head) ];
+    default: return [ deparse(l.head), ...deparseList( l.tail ) ];
+    }
+}
+
 export function deparse (t : Core.Term) : string {
     switch (true) {
-    case Core.isNil(t)   : return '()';
-    case Core.isTrue(t)  : return 'true';
-    case Core.isFalse(t) : return 'false';
-    case Core.isSym(t)   : return '`'+t.value;
-    case Core.isStr(t)   : return `"${t.value}"`;
-    case Core.isNum(t)   : return t.value.toString();
-    case Core.isPair(t)  :
-        if (Core.isList(t)) {
-            if (Core.isNil(t.snd)) {
-                return `(${deparse(t.fst)})`;
-            } else {
-                return `(${deparse(t.fst)}::${deparse(t.snd)})`;
-            }
-        } else {
-            return `(${deparse(t.fst)} * ${deparse(t.snd)})`;
-        }
+    case Core.isNil(t)     : return '()';
+    case Core.isTrue(t)    : return 'true';
+    case Core.isFalse(t)   : return 'false';
+    case Core.isSym(t)     : return t.value;
+    case Core.isStr(t)     : return `"${t.value}"`;
+    case Core.isNum(t)     : return t.value.toString();
+    case Core.isList(t)    : return Core.isNil(t.tail) ? `(${deparse(t.head)})` : `(${deparse(t.head)} ${deparseList(t.tail).join(' ')})`;
+    case Core.isPair(t)    : return `{${deparse(t.fst)} * ${deparse(t.snd)}}`;
     case Core.isLambda(t)  : return `(λ ${deparse(t.param)} . ${deparse(t.body)})`
-    case Core.isClosure(t) : return `[ (${Environment.showLocalEnv(t.env)}) ~ ${deparse(t.abs)} ]`
+    case Core.isClosure(t) : return `[ ${Environment.showLocalEnv(t.env)} ~ ${deparse(t.abs)} ]`
     case Core.isNative(t)  : return `&:native`
     case Core.isFExpr(t)   : return `@:fexpr`
     default:
