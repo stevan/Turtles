@@ -4,9 +4,8 @@ import * as Parser  from '../src/Parser'
 
 let src = `
 
-(let (adder (lambda (x) (lambda (y) (+ x y))))
-    ((adder 10) ((lambda (x y) (+ x y)) 10 (* 4 5)))
-)
+(let (add (lambda (x y) (+ x y)))
+    (add (- 20 10) (* 4 (add 3 2)))))
 
 `
 
@@ -58,6 +57,7 @@ console.log('='.repeat(80)+"\n");
         `((lambda (x y) (+ x y)) 10 (* 2 10))`,
         `((lambda (x y) (+ x y)) (+ 5 5) (* 2 10))`,
         `(((lambda (x) (lambda (y) (+ x y))) 10) 20)`,
+        `(let (add (lambda (x y) (+ x y))) (add (- 20 10) (* 4 (add 3 2)))))`
 
 
 */

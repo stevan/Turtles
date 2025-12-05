@@ -72,15 +72,15 @@ export function evaluate (t : Core.Term, env : Core.Term, depth : number = 0) : 
     }
 }
 
-export function apply (call : Core.Term, arg : Core.Term, depth : number = 0) : Core.Term {
+export function apply (call : Core.Term, args : Core.Term, depth : number = 0) : Core.Term {
     let indent = (depth < 0) ? ' @@ ' : '  '.repeat(depth);
     console.log(`● [${depth.toString().padStart(3, (depth < 0) ? ' ' : '0')}] `+'–'.repeat(72));
-    console.log(`${indent}APPLY:${call.kind} ${Parser.deparse(call)} <- ${Parser.deparse(arg)}`);
+    console.log(`${indent}APPLY:${call.kind} ${Parser.deparse(call)} <- ${Parser.deparse(args)}`);
     // run what we got ...
     switch (true) {
     case Core.isNative(call) :
         console.log(`${indent} & apply – ... Apply Native`);
-        return call.body( arg );
+        return call.body( args );
     case Core.isClosure(call) :
         // unpack closures
         console.log(`${indent} & apply – ^unpack Closure ~~ ${Parser.deparse(call)}`);
@@ -88,13 +88,15 @@ export function apply (call : Core.Term, arg : Core.Term, depth : number = 0) : 
         let lambda = call.abs;
         if (!Core.isLambda(lambda)) throw new Error(`Expected LAMBDA for lambda, but got ${lambda.kind}`);
 
-        let param = lambda.param;
-        if (!Core.isSym(param)) throw new Error(`Expected SYM for lambda param, but got ${param.kind}`);
-        if (!Core.isList(arg))  throw new Error(`Expected PAIR for lambda arg, but got ${arg.kind}`);
-
+        let localEnv = call.env;
+        let params   = lambda.param;
+        while (Core.isList(params) && Core.isList(args)) {
+            localEnv = Environment.Env( params.head, args.head, localEnv )
+            params   = params.tail;
+            args     = args.tail;
+        }
         console.log(`${indent} w/%:ENV => `+Environment.showLocalEnv(call.env));
-
-        return evaluate( lambda.body, Environment.Env( param, arg.head, call.env ), depth + 1 );
+        return evaluate( lambda.body, localEnv, depth + 1 );
     default:
         throw new Error(`WTF! ${JSON.stringify(call)}`);
     }
@@ -174,9 +176,9 @@ export function initEnv () : Core.Term {
             if (!Core.isList(arg))      throw new Error(`Expected Pair as arg in @:(lambda) not(${arg.kind})`);
             if (!Core.isList(arg.head)) throw new Error(`Expected Pair as param in @:(lambda) not(${arg.head.kind})`);
             if (!Core.isList(arg.tail)) throw new Error(`Expected Pair as body in @:(lambda) not(${arg.tail.kind})`);
-            let param = arg.head;
-            let body  = arg.tail;
-            return [ Core.Lambda( param.head, body.head ), env ];
+            let params = arg.head;
+            let body   = arg.tail;
+            return [ Core.Lambda( params, body.head ), env ];
         }),
         env
     );
