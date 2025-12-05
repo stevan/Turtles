@@ -171,7 +171,7 @@ export function initEnv () : Core.Term {
     env = Environment.define(
         Core.Sym('lambda'), Core.FExpr((arg : Core.Term, env : Core.Term) : [ Core.Term, Core.Term ] => {
             console.log(`▶ CALL @:(lambda) w/ ${Parser.deparse(arg)}`);
-            if (!Core.isList(arg))     throw new Error(`Expected Pair as arg in @:(lambda) not(${arg.kind})`);
+            if (!Core.isList(arg))      throw new Error(`Expected Pair as arg in @:(lambda) not(${arg.kind})`);
             if (!Core.isList(arg.head)) throw new Error(`Expected Pair as param in @:(lambda) not(${arg.head.kind})`);
             if (!Core.isList(arg.tail)) throw new Error(`Expected Pair as body in @:(lambda) not(${arg.tail.kind})`);
             let param = arg.head;
@@ -184,13 +184,13 @@ export function initEnv () : Core.Term {
     env = Environment.define(
         Core.Sym('let'), Core.FExpr((arg : Core.Term, env : Core.Term) : [ Core.Term, Core.Term ] => {
             console.log(`▶ CALL @:(let) w/ ${Parser.deparse(arg)}`);
-            if (!Core.isList(arg))     throw new Error(`Expected Pair as arg in @:(let) not(${arg.kind})`);
+            if (!Core.isList(arg))      throw new Error(`Expected Pair as arg in @:(let) not(${arg.kind})`);
             if (!Core.isList(arg.head)) throw new Error(`Expected Pair as bind in @:(let) not(${arg.head.kind})`);
             let bind = arg.head;
             if (!Core.isSym(bind.head))  throw new Error(`Expected Sym as bind/sym in @:(let) not(${bind.head.kind})`);
             if (!Core.isList(bind.tail)) throw new Error(`Expected Pair as bind/value in @:(let) not(${bind.tail.kind})`);
             let sym   = bind.head;
-            let value = bind.tail.head; // need to evaluate this!
+            let value = bind.tail.head;
             let body  = arg.tail;
             if (!Core.isList(body))  throw new Error(`Expected Pair as body in @:(let) not(${body.kind})`);
             return [

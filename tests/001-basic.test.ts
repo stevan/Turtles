@@ -5,7 +5,7 @@ import * as Parser  from '../src/Parser'
 let src = `
 
 (let (adder (lambda (x) (lambda (y) (+ x y))))
-    ((adder 10) 20)
+    ((adder 10) ((lambda (x y) (+ x y)) 10 (* 4 5)))
 )
 
 `
